@@ -1,0 +1,985 @@
+<title>Jois Avatar Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one-screen studio. Live 3D stage on the left, a tool rail on the right (stacks under the stage on phones). */
+:root {
+  --bg: #E9EEEC; --surface: #F7FAF9; --sunk: #DFE6E3; --ink: #13201E; --muted: #5A6A67; --line: #CDD8D4;
+  --accent: #1D7472; --accent-ink: #FFFFFF; --warm: #D9773E;
+  --good: #2C8A52; --warn: #B7811A; --bad: #BF4339;
+  --stage-top: #F4F7F6; --stage-bot: #D3DDDA;
+  --display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1514; --surface: #141D1C; --sunk: #0B1110; --ink: #E3ECEA; --muted: #90A19D; --line: #24312F;
+  --accent: #52B5AF; --accent-ink: #062120; --warm: #EE9A63;
+  --good: #57C083; --warn: #E2B04C; --bad: #EE7468;
+  --stage-top: #1B2625; --stage-bot: #0A100F; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1514; --surface: #141D1C; --sunk: #0B1110; --ink: #E3ECEA; --muted: #90A19D; --line: #24312F;
+  --accent: #52B5AF; --accent-ink: #062120; --warm: #EE9A63;
+  --good: #57C083; --warn: #E2B04C; --bad: #EE7468;
+  --stage-top: #1B2625; --stage-bot: #0A100F; color-scheme: dark }
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; display: flex; align-items: baseline; gap: 8px; }
+.brand small { font-family: var(--mono); font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+.top .spec { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tag b { color: var(--ink); font-weight: 600; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); min-height: 0; }
+.stage { position: relative; min-height: 0; background: linear-gradient(180deg, var(--stage-top), var(--stage-bot)); overflow: hidden; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.hud .tag { background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(6px); }
+.cam { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 7px 11px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.vis-chip { position: absolute; right: 14px; bottom: 14px; min-width: 92px; text-align: center; padding: 8px 12px 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.vis-chip .v { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1.1; color: var(--warm); }
+.vis-chip .l { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+.rail { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-left: 1px solid var(--line); background: var(--surface); }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.tabs a { text-decoration: none; color: var(--muted); text-align: center; padding: 12px 4px 10px; font-weight: 500; font-size: 13px; border-bottom: 2px solid transparent; }
+.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.pane { overflow-y: auto; padding-block: 16px 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+h2 { font-family: var(--display); font-size: 15px; font-weight: 500; margin: 0; letter-spacing: -0.005em; text-wrap: balance; }
+.lede { color: var(--muted); margin: -8px 0 0; font-size: 13px; }
+.label { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+textarea { width: 100%; min-height: 96px; resize: vertical; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); line-height: 1.45; }
+select, input[type="search"] { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field .label { display: flex; justify-content: space-between; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.btn { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary.speaking { background: var(--warm); border-color: var(--warm); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.check { display: flex; gap: 8px; align-items: center; cursor: pointer; font-size: 13px; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.note { font-size: 12.5px; color: var(--muted); }
+.note.warnc { color: var(--warn); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 100%; }
+#strip { width: 100%; height: 46px; display: block; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+pre.code { margin: 0; padding: 10px 12px; background: var(--sunk); border-radius: 10px; font-family: var(--mono); font-size: 11.5px; overflow-x: auto; line-height: 1.5; color: var(--ink); }
+
+.moods { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mood { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mood b { font-weight: 600; font-size: 14px; }
+.mood span { font-family: var(--mono); font-size: 10.5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.mood[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.morphs { display: flex; flex-direction: column; }
+.mrow { display: grid; grid-template-columns: minmax(0, 1fr) 110px 34px; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.mrow code { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow output { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.mrow.on code { color: var(--accent); }
+
+.score { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); }
+.score .big { font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.score .big small { font-size: 15px; color: var(--muted); font-weight: 500; }
+.score .meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.score .meta b { overflow-wrap: anywhere; }
+.results { display: flex; flex-direction: column; }
+.res { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pill { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 3px 0; border-radius: 6px; height: fit-content; }
+.pill.pass { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.pill.fail { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.pill.info { color: var(--muted); background: var(--sunk); }
+.res .t { font-weight: 600; }
+.res .v { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.res .r { font-size: 12px; color: var(--muted); }
+.miss { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.miss code { font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.file { position: relative; overflow: hidden; display: inline-flex; }
+.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+#copyfallback { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 11px; }
+
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 58vh; min-height: 340px; }
+  .rail { border-left: 0; border-top: 1px solid var(--line); }
+  .pane { overflow: visible; }
+  .top .spec { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">Jois Avatar Kit <small>v1.0 · MVP</small></div>
+    <div class="spec" id="spec">
+      <span class="tag">GLB · <b>загрузка…</b></span>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="stage" id="stage" aria-label="3D-аватар">
+      <div class="loading" id="loading">загружаю аватар…</div>
+      <div class="hud" id="hud">
+        <span class="tag" id="hudFps">— FPS</span>
+        <span class="tag" id="hudTris">— треуг.</span>
+        <span class="tag" id="hudDc">— draw calls</span>
+      </div>
+      <div class="cam">
+        <div class="seg" role="group" aria-label="Ракурс">
+          <button id="camFace" aria-pressed="true">Лицо</button>
+          <button id="camBust" aria-pressed="false">По пояс</button>
+          <button id="camFull" aria-pressed="false">В рост</button>
+        </div>
+        <div class="seg"><button id="wire" aria-pressed="false">Сетка</button></div>
+      </div>
+      <div class="vis-chip" id="visChip" hidden><div class="v" id="visV">sil</div><div class="l">визема</div></div>
+    </section>
+
+    <aside class="rail">
+      <nav class="tabs" aria-label="Разделы">
+        <a href="#speak" data-tab="speak">Речь</a>
+        <a href="#mood" data-tab="mood">Эмоции</a>
+        <a href="#morphs" data-tab="morphs">Морфы</a>
+        <a href="#check" data-tab="check">Проверка ТЗ</a>
+      </nav>
+
+      <!-- SPEAK -->
+      <div class="pane" id="tab-speak">
+        <h2>Липсинг из текста</h2>
+        <p class="lede">Текст разбивается на 15 визем (sil, PP, FF … ou) с таймингом и сглаживанием коартикуляции. Озвучка — голосом браузера.</p>
+        <textarea id="text">Сәлем! Меня зовут Джойс. Я слушаю тебя, понимаю интонацию и отвечаю голосом, а мои губы двигаются в такт каждому звуку.</textarea>
+        <div class="chips" role="group" aria-label="Примеры">
+          <button class="chip" data-sample="ru" aria-pressed="true">Русский</button>
+          <button class="chip" data-sample="kk" aria-pressed="false">Қазақша</button>
+          <button class="chip" data-sample="en" aria-pressed="false">English</button>
+        </div>
+        <div class="grid2">
+          <div class="field"><span class="label">Голос</span><select id="voice"><option value="">По умолчанию</option></select></div>
+          <div class="field"><span class="label">Скорость <output id="rateO">1.0×</output></span><input id="rate" type="range" min="0.6" max="1.6" step="0.05" value="1"></div>
+          <div class="field"><span class="label">Артикуляция <output id="artO">100%</output></span><input id="art" type="range" min="0.4" max="1.4" step="0.05" value="1"></div>
+          <div class="field" style="justify-content:flex-end"><label class="check"><input type="checkbox" id="tts" checked> Озвучивать</label></div>
+        </div>
+        <div class="row"><button class="btn primary" id="speakBtn">Сказать</button><span class="note" id="speakNote"></span></div>
+        <canvas id="strip" aria-label="Дорожка визем"></canvas>
+        <hr>
+        <h2>Липсинг по аудио</h2>
+        <p class="lede">Загрузите WAV/MP3 из голосового движка Jois. Виземы подбираются по громкости и спектру в реальном времени.</p>
+        <div class="row">
+          <span class="btn file">Выбрать аудиофайл<input type="file" id="audioFile" accept="audio/*"></span>
+          <button class="btn" id="audioPlay" disabled>Воспроизвести</button>
+        </div>
+        <span class="note" id="audioNote">Файл не выбран</span>
+        <hr>
+        <h2>Интеграция с голосовым движком</h2>
+        <p class="lede">Движок присылает события визем — плеер сам смешивает их с эмоциями, морганием и взглядом.</p>
+<pre class="code">// window.avatar — доступен на этой странице
+avatar.say([{ t: 0.00, v: "sil" },
+            { t: 0.08, v: "SS"  },
+            { t: 0.16, v: "E"   }]);   // тайминг от TTS
+avatar.setViseme("oh", 0.8);       // потоковый режим
+avatar.setEmotion("empathy", 0.7);
+avatar.lookAt();                    // смотреть в камеру</pre>
+      </div>
+
+      <!-- MOOD -->
+      <div class="pane" id="tab-mood" hidden>
+        <h2>Эмоции из ТЗ</h2>
+        <p class="lede">Каждая эмоция — пресет из стандартных ARKit-блендшейпов, поэтому работает на любой модели с ARKit-набором.</p>
+        <div class="moods" id="moods"></div>
+        <div class="field"><span class="label">Интенсивность <output id="intO">45%</output></span><input id="intensity" type="range" min="0" max="1" step="0.05" value="0.45"></div>
+        <hr>
+        <h2>Живость</h2>
+        <label class="check"><input type="checkbox" id="optGaze" checked> Взгляд следит за курсором</label>
+        <label class="check"><input type="checkbox" id="optBlink" checked> Моргание и микросаккады</label>
+        <label class="check"><input type="checkbox" id="optBreath" checked> Дыхание и покачивание головы</label>
+      </div>
+
+      <!-- MORPHS -->
+      <div class="pane" id="tab-morphs" hidden>
+        <h2>Инспектор блендшейпов</h2>
+        <p class="lede">Подвигайте любой морф, чтобы проверить изоляцию: губы не трогают глаза, брови не трогают рот.</p>
+        <input type="search" id="mSearch" placeholder="Поиск: jaw, smile, viseme…" aria-label="Поиск морфа">
+        <div class="chips" id="mFilter" role="group" aria-label="Группа"></div>
+        <div class="row"><span class="note" id="mCount"></span><button class="btn" id="mReset" style="margin-left:auto">Сбросить</button></div>
+        <div class="morphs" id="mList"></div>
+      </div>
+
+      <!-- CHECK -->
+      <div class="pane" id="tab-check" hidden>
+        <h2>Автопроверка по критериям приёмки</h2>
+        <p class="lede">Тот же чек-лист, что в разделах 2 и 5 технического задания. Работает с любой .glb — можно проверить модель любого подрядчика.</p>
+        <div class="score" id="score"><div class="big">—</div><div class="meta"><span class="note">проверяю…</span></div></div>
+        <div class="row">
+          <span class="btn file">Проверить свою .glb<input type="file" id="glbFile" accept=".glb,model/gltf-binary"></span>
+          <button class="btn" id="fpsBtn">Замерить FPS</button>
+          <button class="btn" id="copyBtn">Скопировать отчёт</button>
+        </div>
+        <textarea id="copyfallback" hidden readonly aria-label="Отчёт"></textarea>
+        <div class="results" id="results"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script>
+"use strict";
+/* ============================================================ constants */
+const ARKIT = ["eyeBlinkLeft","eyeLookDownLeft","eyeLookInLeft","eyeLookOutLeft","eyeLookUpLeft","eyeSquintLeft","eyeWideLeft",
+"eyeBlinkRight","eyeLookDownRight","eyeLookInRight","eyeLookOutRight","eyeLookUpRight","eyeSquintRight","eyeWideRight",
+"jawForward","jawLeft","jawRight","jawOpen","mouthClose","mouthFunnel","mouthPucker","mouthLeft","mouthRight",
+"mouthSmileLeft","mouthSmileRight","mouthFrownLeft","mouthFrownRight","mouthDimpleLeft","mouthDimpleRight",
+"mouthStretchLeft","mouthStretchRight","mouthRollLower","mouthRollUpper","mouthShrugLower","mouthShrugUpper",
+"mouthPressLeft","mouthPressRight","mouthLowerDownLeft","mouthLowerDownRight","mouthUpperUpLeft","mouthUpperUpRight",
+"browDownLeft","browDownRight","browInnerUp","browOuterUpLeft","browOuterUpRight","cheekPuff",
+"cheekSquintLeft","cheekSquintRight","noseSneerLeft","noseSneerRight","tongueOut"];
+const VIS = ["sil","PP","FF","TH","DD","kk","CH","SS","nn","RR","aa","E","ih","oh","ou"];
+const VIS_ALIAS = { ih: ["ih","i"], oh: ["oh","o"], ou: ["ou","u"] };
+/* fallback: drive ARKit shapes when a model has no viseme shapes */
+const VIS_RECIPE = {
+  sil:{}, PP:{mouthClose:1,mouthPressLeft:.6,mouthPressRight:.6}, FF:{jawOpen:.12,mouthRollLower:.8,mouthUpperUpLeft:.3,mouthUpperUpRight:.3},
+  TH:{jawOpen:.25,tongueOut:.35}, DD:{jawOpen:.28,mouthStretchLeft:.25,mouthStretchRight:.25}, kk:{jawOpen:.32,mouthStretchLeft:.35,mouthStretchRight:.35},
+  CH:{jawOpen:.22,mouthFunnel:.6,mouthPucker:.25}, SS:{jawOpen:.1,mouthStretchLeft:.55,mouthStretchRight:.55}, nn:{jawOpen:.18},
+  RR:{jawOpen:.2,mouthPucker:.45,mouthFunnel:.3}, aa:{jawOpen:.75,mouthLowerDownLeft:.3,mouthLowerDownRight:.3},
+  E:{jawOpen:.4,mouthStretchLeft:.55,mouthStretchRight:.55,mouthSmileLeft:.2,mouthSmileRight:.2}, ih:{jawOpen:.3,mouthStretchLeft:.4,mouthStretchRight:.4},
+  oh:{jawOpen:.5,mouthFunnel:.75}, ou:{jawOpen:.25,mouthPucker:.9,mouthFunnel:.2}
+};
+let EMOTIONS = {
+  joy:{mouthSmileLeft:1,mouthSmileRight:1,cheekSquintLeft:.8,cheekSquintRight:.8,eyeSquintLeft:.65,eyeSquintRight:.65,browOuterUpLeft:.25,browOuterUpRight:.25},
+  surprise:{browInnerUp:.9,browOuterUpLeft:.8,browOuterUpRight:.8,eyeWideLeft:.9,eyeWideRight:.9,jawOpen:.35,mouthFunnel:.25},
+  focus:{browDownLeft:.55,browDownRight:.55,eyeSquintLeft:.45,eyeSquintRight:.45,mouthPressLeft:.4,mouthPressRight:.4},
+  empathy:{browInnerUp:.75,mouthFrownLeft:.35,mouthFrownRight:.35,eyeSquintLeft:.2,eyeSquintRight:.2,eyeBlinkLeft:.12,eyeBlinkRight:.12}
+};
+const MOODS = [
+  {id:"neutral", ru:"Нейтрально", head:[0,0,0]},
+  {id:"joy", ru:"Радость", head:[-0.02,0,0.05]},
+  {id:"surprise", ru:"Удивление", head:[-0.07,0,0]},
+  {id:"focus", ru:"Фокус", head:[0.06,0,0]},
+  {id:"empathy", ru:"Сочувствие", head:[0.04,0,-0.1]},
+];
+const SAMPLES = {
+  ru: "Сәлем! Меня зовут Джойс. Я слушаю тебя, понимаю интонацию и отвечаю голосом, а мои губы двигаются в такт каждому звуку.",
+  kk: "Сәлеметсіз бе! Мен Джойспын. Сізбен сөйлесуге қуаныштымын. Бүгін не туралы әңгімелесеміз?",
+  en: "Hi, I'm Jois. I listen, I understand how you feel, and my lips follow every sound you hear."
+};
+const LANG = { ru: "ru-RU", kk: "kk-KZ", en: "en-US" };
+
+/* ============================================================ DOM helpers */
+const $ = (id) => document.getElementById(id);
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ============================================================ three setup */
+const stage = $("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.88;
+stage.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(26, 1, 0.05, 50);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.minDistance = 0.35; controls.maxDistance = 6;
+controls.enablePan = true;
+
+// soft studio light: image-based room lighting + a warm key, a cool fill and a rim
+if (THREE.RoomEnvironment) {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+}
+const envOn = !!scene.environment;
+scene.add(new THREE.HemisphereLight(0xfff6ee, 0x5a4840, envOn ? 0.25 : 0.7));
+const key = new THREE.DirectionalLight(0xfff0e0, envOn ? 1.45 : 1.7); key.position.set(1.6, 2.6, 2.0); scene.add(key);
+const fill = new THREE.DirectionalLight(0xe4efff, envOn ? 0.22 : 0.4); fill.position.set(-2, 1.4, 1.4); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xbff8ef, 0.8); rim.position.set(-0.6, 2.2, -2.4); scene.add(rim);
+
+// contact shadow
+(function () {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d"); const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+  gr.addColorStop(0, "rgba(0,0,0,0.38)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.002; scene.add(m);
+})();
+
+const VIEWS = {
+  face: { pos: [0, 1.40, 1.3], tgt: [0, 1.38, 0] },
+  bust: { pos: [0, 1.22, 1.75], tgt: [0, 1.2, 0] },
+  full: { pos: [0.35, 0.95, 3.6], tgt: [0, 0.78, 0] },
+};
+let camAnim = null, currentView = "face";
+function setView(name, instant) {
+  currentView = name;
+  const v = VIEWS[name];
+  ["camFace","camBust","camFull"].forEach(id => $(id).setAttribute("aria-pressed", String(id === "cam" + name[0].toUpperCase() + name.slice(1))));
+  const from = { p: camera.position.clone(), t: controls.target.clone() };
+  const to = { p: new THREE.Vector3(...v.pos), t: new THREE.Vector3(...v.tgt) };
+  if (instant) { camera.position.copy(to.p); controls.target.copy(to.t); controls.update(); return; }
+  camAnim = { from, to, t: 0 };
+}
+$("camFace").onclick = () => setView("face");
+$("camBust").onclick = () => setView("bust");
+$("camFull").onclick = () => setView("full");
+setView("face", true);
+
+function resize() {
+  const r = stage.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage); resize();
+
+/* ============================================================ avatar state */
+const A = {
+  root: null, meshes: [], dict: new Map(), bones: {}, hasVisemes: false, name: "",
+  weights: {}, manual: {}, emo: {}, emoTarget: {}, vis: {}, visTarget: {}, headEmo: new THREE.Vector3(), headEmoT: new THREE.Vector3(),
+};
+const loader = new THREE.GLTFLoader();
+let defaultBuffer = null;
+
+function normBone(n) { return n.replace(/^mixamorig[:_]?/i, "").replace(/[^a-z0-9]/gi, "").toLowerCase(); }
+function setupModel(gltf, name) {
+  if (A.root) { scene.remove(A.root); A.root.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  A.root = gltf.scene; A.name = name; A.meshes = []; A.dict = new Map(); A.bones = {};
+  A.root.traverse(o => {
+    if (o.isMesh) {
+      o.frustumCulled = false;
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if ("envMapIntensity" in m) m.envMapIntensity = 0.3; });
+      if (o.morphTargetDictionary) {
+        A.meshes.push(o);
+        for (const [k, i] of Object.entries(o.morphTargetDictionary)) {
+          const lk = k.toLowerCase();
+          if (!A.dict.has(lk)) A.dict.set(lk, []);
+          A.dict.get(lk).push([o, i]);
+        }
+      }
+    }
+    if (o.isBone) A.bones[normBone(o.name)] = o;
+  });
+  for (const b of Object.values(A.bones)) b.userData.rest = b.quaternion.clone();
+  A.hasVisemes = VIS.every(v => resolveVis(v));
+  const extras = gltf.parser && gltf.parser.json && gltf.parser.json.asset && gltf.parser.json.asset.extras;
+  if (extras && extras.jois && extras.jois.emotions) EMOTIONS = extras.jois.emotions;
+  scene.add(A.root);
+  // frame the camera on this model's eyes, whatever its height
+  A.root.updateMatrixWorld(true);
+  const eb = A.bones["lefteye"] || A.bones["head"];
+  if (eb) {
+    const p = new THREE.Vector3(); eb.getWorldPosition(p); const ey = p.y;
+    VIEWS.face = { pos: [0, ey - 0.01, 0.95], tgt: [0, ey - 0.04, 0] };
+    VIEWS.bust = { pos: [0, ey - 0.2, 2.1], tgt: [0, ey - 0.24, 0] };
+    VIEWS.full = { pos: [0.45, ey * 0.62, 4.6], tgt: [0, ey * 0.52, 0] };
+    setView(currentView, true);
+  }
+  A.weights = {}; A.manual = {}; A.vis = {}; A.visTarget = {};
+  buildMorphList();
+  updateSpecBar(gltf);
+  $("loading").hidden = true;
+}
+function resolveVis(v) {
+  const names = (VIS_ALIAS[v] || [v]).flatMap(a => ["viseme_" + a.toLowerCase(), a.toLowerCase() === "e" ? "viseme_e" : null]).filter(Boolean);
+  for (const n of names) if (A.dict.has(n)) return n;
+  return null;
+}
+function setW(map, name, w) { map[name] = (map[name] || 0) + w; }
+
+/* ============================================================ speech → visemes */
+const VMAP = {};
+const put = (chars, v) => { for (const c of chars) VMAP[c] = v; };
+put("аaяә", "aa"); put("оoёө", "oh"); put("уuюүұw", "ou"); put("эeеє", "E"); put("иiыіyй", "ih");
+put("пбмpbm", "PP"); put("фвfv", "FF"); put("тдtd", "DD"); put("нлnlң", "nn"); put("сзцszcx", "SS");
+put("шжчщj", "CH"); put("кгхқғһkgqh", "kk"); put("рr", "RR");
+const VOWEL_V = new Set(["aa","oh","ou","E","ih"]);
+function buildTimeline(text, rate) {
+  const s = text.toLowerCase(); const segs = []; const charTime = new Array(s.length + 1).fill(0); let t = 0;
+  const push = (v, d) => {
+    d /= rate; const last = segs[segs.length - 1];
+    if (last && last.v === v) { last.d += d * 0.6; t += d * 0.6; return; }
+    segs.push({ v, s: t, d }); t += d;
+  };
+  for (let i = 0; i < s.length; i++) {
+    charTime[i] = t; const c = s[i], n = s[i + 1];
+    if (c === "t" && n === "h") { push("TH", 0.08); i++; charTime[i] = t; continue; }
+    if ((c === "s" || c === "c") && n === "h") { push("CH", 0.09); i++; charTime[i] = t; continue; }
+    if (c === "n" && n === "g") { push("nn", 0.08); i++; charTime[i] = t; continue; }
+    const v = VMAP[c];
+    if (!v) {
+      if (/[ьъ'’]/.test(c)) continue;
+      if (/\s/.test(c)) push("sil", 0.05);
+      else if (/[,;:—–\-]/.test(c)) push("sil", 0.24);
+      else if (/[.!?…]/.test(c)) push("sil", 0.4);
+      continue;
+    }
+    push(v, VOWEL_V.has(v) ? 0.12 : 0.072);
+  }
+  push("sil", 0.2); charTime[s.length] = t;
+  return { segs, charTime, total: t };
+}
+const speech = { tl: null, t: 0, on: false, started: false, tts: false, ended: false, idx: 0, cur: "sil" };
+function stopSpeech() {
+  speech.on = false; try { speechSynthesis.cancel(); } catch (e) {}
+  $("speakBtn").textContent = "Сказать"; $("speakBtn").classList.remove("speaking"); $("visChip").hidden = true;
+}
+function speak() {
+  if (speech.on) { stopSpeech(); return; }
+  stopAudio();
+  const text = $("text").value.trim(); if (!text) return;
+  const rate = +$("rate").value;
+  speech.tl = buildTimeline(text, rate); speech.t = 0; speech.idx = 0; speech.on = true; speech.started = false; speech.ended = false;
+  $("speakBtn").textContent = "Стоп"; $("speakBtn").classList.add("speaking"); $("visChip").hidden = false;
+  $("speakNote").textContent = "";
+  speech.tts = $("tts").checked && "speechSynthesis" in window;
+  if (speech.tts) {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = LANG[currentSample] || "ru-RU"; u.rate = rate;
+      const vs = speechSynthesis.getVoices(); const sel = $("voice").value;
+      const v = vs.find(x => x.name === sel); if (v) { u.voice = v; u.lang = v.lang; }
+      u.onstart = () => { speech.started = true; speech.t = 0; };
+      u.onboundary = (e) => {
+        if (!speech.on || e.name && e.name !== "word") return;
+        const tt = speech.tl.charTime[e.charIndex]; if (tt == null) return;
+        speech.t = speech.t * 0.35 + tt * 0.65;
+      };
+      u.onend = () => { speech.ended = true; };
+      u.onerror = () => { speech.tts = false; speech.started = true; $("speakNote").textContent = "Голос недоступен — показываю липсинг без звука."; };
+      speechSynthesis.speak(u);
+      setTimeout(() => { if (speech.on && !speech.started) { speech.tts = false; speech.started = true; $("speakNote").textContent = "Голос браузера не ответил — липсинг идёт без звука."; } }, 1500);
+    } catch (e) { speech.tts = false; speech.started = true; }
+  } else speech.started = true;
+}
+function speechFrame(dt) {
+  for (const v of VIS) A.visTarget[v] = 0;
+  if (A.stream && life.time < A.stream.until) A.visTarget[A.stream.v] = A.stream.w;
+  if (!speech.on) return;
+  if (!speech.started) return;
+  speech.t += dt;
+  const tl = speech.tl, segs = tl.segs;
+  if (speech.t >= tl.total) {
+    if (!speech.tts || speech.ended) { stopSpeech(); return; }
+    return; // voice still talking: hold mouth closed
+  }
+  while (speech.idx < segs.length - 1 && speech.t > segs[speech.idx].s + segs[speech.idx].d) speech.idx++;
+  while (speech.idx > 0 && speech.t < segs[speech.idx].s) speech.idx--;
+  const sg = segs[speech.idx], nx = segs[speech.idx + 1];
+  const f = (speech.t - sg.s) / sg.d;
+  const amp = +$("art").value * (VOWEL_V.has(sg.v) ? 1 : 0.85);
+  let wNext = nx && f > 0.6 ? (f - 0.6) / 0.4 * 0.55 : 0;
+  A.visTarget[sg.v] = amp * (1 - wNext * 0.6);
+  if (nx) A.visTarget[nx.v] = Math.max(A.visTarget[nx.v] || 0, amp * wNext);
+  speech.cur = sg.v;
+  $("visV").textContent = sg.v;
+}
+
+/* strip */
+const strip = $("strip"); const sctx = strip.getContext("2d");
+function drawStrip() {
+  const r = strip.getBoundingClientRect(); const dpr = Math.min(2, devicePixelRatio);
+  if (strip.width !== Math.round(r.width * dpr)) { strip.width = Math.round(r.width * dpr); strip.height = Math.round(r.height * dpr); }
+  const W = strip.width, H = strip.height; sctx.clearRect(0, 0, W, H);
+  const tl = speech.tl || buildTimeline($("text").value || "", +$("rate").value);
+  if (!tl.total) return;
+  const acc = cssVar("--accent"), warm = cssVar("--warm"), mut = cssVar("--muted"), line = cssVar("--line");
+  const win = 3.2 * dpr, pxs = W / Math.min(tl.total, 6);
+  const t0 = speech.on ? Math.max(0, speech.t - 1.2) : 0;
+  sctx.font = `${10 * dpr}px JetBrains Mono, monospace`; sctx.textBaseline = "middle";
+  for (const s of tl.segs) {
+    const x = (s.s - t0) * pxs, w = s.d * pxs;
+    if (x + w < 0 || x > W) continue;
+    if (s.v === "sil") { sctx.fillStyle = line; sctx.fillRect(x, H * 0.46, w, H * 0.08); continue; }
+    sctx.fillStyle = VOWEL_V.has(s.v) ? acc : mut; sctx.globalAlpha = VOWEL_V.has(s.v) ? 0.85 : 0.45;
+    sctx.fillRect(x + 1, H * 0.18, Math.max(1, w - 2), H * 0.64); sctx.globalAlpha = 1;
+    if (w > 18 * dpr) { sctx.fillStyle = VOWEL_V.has(s.v) ? cssVar("--accent-ink") : cssVar("--surface"); sctx.fillText(s.v, x + 4 * dpr, H / 2); }
+  }
+  if (speech.on) { const x = (speech.t - t0) * pxs; sctx.fillStyle = warm; sctx.fillRect(x - dpr, 0, 2 * dpr, H); }
+}
+
+/* audio-file lipsync */
+let actx = null, analyser = null, abuf = null, asrc = null;
+const audio = { on: false };
+$("audioFile").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    abuf = await actx.decodeAudioData(await f.arrayBuffer());
+    $("audioNote").textContent = `${f.name} · ${abuf.duration.toFixed(1)} с`; $("audioPlay").disabled = false;
+  } catch (err) { $("audioNote").textContent = "Не удалось прочитать файл. Подойдут WAV, MP3, OGG или M4A."; }
+};
+function stopAudio() { if (asrc) { try { asrc.stop(); } catch (e) {} asrc = null; } audio.on = false; $("audioPlay").textContent = "Воспроизвести"; }
+$("audioPlay").onclick = async () => {
+  if (audio.on) { stopAudio(); $("visChip").hidden = true; return; }
+  if (speech.on) stopSpeech();
+  await actx.resume();
+  analyser = actx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.5;
+  asrc = actx.createBufferSource(); asrc.buffer = abuf; asrc.connect(analyser); analyser.connect(actx.destination);
+  asrc.onended = () => { audio.on = false; $("audioPlay").textContent = "Воспроизвести"; $("visChip").hidden = true; };
+  asrc.start(); audio.on = true; $("audioPlay").textContent = "Стоп"; $("visChip").hidden = false;
+};
+const fbuf = new Float32Array(1024), tbuf = new Float32Array(1024);
+function audioFrame() {
+  if (!audio.on || !analyser) return;
+  analyser.getFloatTimeDomainData(tbuf); analyser.getFloatFrequencyData(fbuf);
+  let rms = 0; for (let i = 0; i < tbuf.length; i++) rms += tbuf[i] * tbuf[i]; rms = Math.sqrt(rms / tbuf.length);
+  const hz = actx.sampleRate / analyser.fftSize; const band = (a, b) => { let s = 0; for (let i = Math.floor(a / hz); i < b / hz; i++) s += Math.pow(10, fbuf[i] / 20); return s; };
+  const lo = band(80, 700), mid = band(700, 2000), hi = band(2000, 4500), vh = band(4500, 9000), tot = lo + mid + hi + vh + 1e-9;
+  const open = clamp((rms - 0.012) * 7) * +$("art").value;
+  let v = "sil";
+  if (vh / tot > 0.35 && open < 0.6) v = "SS";
+  else if (open > 0.05) v = lo / tot > 0.55 ? (mid / tot < 0.2 ? "ou" : "oh") : hi / tot > 0.3 ? "E" : mid / tot > 0.3 ? "aa" : "ih";
+  A.visTarget[v] = Math.max(0.25, open);
+  $("visV").textContent = v;
+}
+
+/* ============================================================ procedural life */
+const life = { blinkT: 1.2, blink: 0, sacc: new THREE.Vector2(), saccT: 0.8, gaze: new THREE.Vector2(), gazeT: new THREE.Vector2(), time: 0 };
+const pointer = { x: 0, y: 0, active: false };
+stage.addEventListener("pointermove", (e) => {
+  const r = stage.getBoundingClientRect();
+  pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1; pointer.y = -(((e.clientY - r.top) / r.height) * 2 - 1); pointer.active = true;
+});
+stage.addEventListener("pointerleave", () => { pointer.active = false; });
+
+const tmpQ = new THREE.Quaternion(), tmpE = new THREE.Euler();
+function poseBone(name, x, y, z) {
+  const b = A.bones[name]; if (!b || !b.userData.rest) return;
+  tmpE.set(x, y, z, "XYZ"); tmpQ.setFromEuler(tmpE); b.quaternion.copy(b.userData.rest).multiply(tmpQ);
+}
+function lifeFrame(dt) {
+  life.time += dt; const t = life.time;
+  // blink
+  let blink = 0;
+  if ($("optBlink").checked) {
+    life.blinkT -= dt;
+    if (life.blinkT <= 0) { life.blink = 0.001; life.blinkT = 2 + Math.random() * 3.5; if (Math.random() < 0.15) life.blinkT = 0.25; }
+    if (life.blink > 0) { life.blink += dt / 0.17; if (life.blink >= 1) life.blink = 0; else blink = Math.sin(Math.PI * life.blink); }
+    life.saccT -= dt; if (life.saccT <= 0) { life.sacc.set((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.05); life.saccT = 0.5 + Math.random() * 1.6; }
+  } else life.sacc.set(0, 0);
+  setW(A.weights, "eyeBlinkLeft", blink); setW(A.weights, "eyeBlinkRight", blink);
+  // gaze
+  if ($("optGaze").checked && pointer.active) life.gazeT.set(pointer.x * 0.9, pointer.y * 0.6 + 0.05);
+  else life.gazeT.set(0, 0);
+  life.gaze.lerp(life.gazeT, 1 - Math.exp(-dt * 6));
+  const gx = life.gaze.x + life.sacc.x, gy = life.gaze.y + life.sacc.y;
+  poseBone("lefteye", -gy * 0.45, gx * 0.55, 0); poseBone("righteye", -gy * 0.45, gx * 0.55, 0);
+  // head + body
+  A.headEmo.lerp(A.headEmoT, 1 - Math.exp(-dt * 3));
+  const br = $("optBreath").checked ? 1 : 0;
+  const nod = speech.on || audio.on ? Math.sin(t * 7.3) * 0.012 + Math.sin(t * 2.1) * 0.015 : 0;
+  const hx = -gy * 0.18 + A.headEmo.x + br * Math.sin(t * 0.9) * 0.012 + nod;
+  const hy = gx * 0.28 + A.headEmo.y + br * Math.sin(t * 0.43) * 0.03;
+  const hz = A.headEmo.z + br * Math.sin(t * 0.61 + 1) * 0.015;
+  poseBone("neck", hx * 0.4, hy * 0.4, hz * 0.4); poseBone("head", hx * 0.6, hy * 0.6, hz * 0.6);
+  poseBone("spine1", br * Math.sin(t * 1.6) * 0.012, 0, 0); poseBone("spine2", br * Math.sin(t * 1.6 + 0.4) * 0.01, 0, 0);
+  poseBone("leftarm", 0, 0, -0.42 - br * Math.sin(t * 1.6) * 0.01); poseBone("rightarm", 0, 0, 0.42 + br * Math.sin(t * 1.6) * 0.01);
+  poseBone("leftforearm", 0, -0.15, -0.08); poseBone("rightforearm", 0, 0.15, 0.08);
+}
+
+/* ============================================================ emotions UI */
+let mood = "joy";
+function renderMoods() {
+  $("moods").innerHTML = MOODS.map(m => {
+    const keys = m.id === "neutral" ? "без смещений" : Object.keys(EMOTIONS[m.id] || {}).slice(0, 4).join(" · ");
+    return `<button class="mood" data-mood="${m.id}" aria-pressed="${m.id === mood}"><b>${m.ru}</b><span>${esc(keys)}</span></button>`;
+  }).join("");
+  $("moods").querySelectorAll("button").forEach(b => b.onclick = () => { mood = b.dataset.mood; renderMoods(); applyMood(); });
+}
+function applyMood() {
+  const k = +$("intensity").value; A.emoTarget = {};
+  for (const [n, w] of Object.entries(EMOTIONS[mood] || {})) A.emoTarget[n] = w * k;
+  const m = MOODS.find(x => x.id === mood); A.headEmoT.set(m.head[0] * k, m.head[1] * k, m.head[2] * k);
+}
+$("intensity").oninput = (e) => { $("intO").textContent = Math.round(e.target.value * 100) + "%"; applyMood(); };
+
+/* ============================================================ morph inspector */
+const GROUPS = [
+  ["all", "Все", () => true],
+  ["eyes", "Глаза", n => /^eye/i.test(n)],
+  ["jaw", "Челюсть", n => /^jaw|tongue/i.test(n)],
+  ["mouth", "Рот", n => /^mouth/i.test(n)],
+  ["face", "Брови и щёки", n => /^(brow|cheek|nose)/i.test(n)],
+  ["vis", "Виземы", n => /^viseme/i.test(n)],
+];
+let mGroup = "all";
+function morphNames() { const s = []; for (const m of A.meshes) for (const k of Object.keys(m.morphTargetDictionary)) if (!s.includes(k)) s.push(k); return s; }
+function buildMorphList() {
+  $("mFilter").innerHTML = GROUPS.map(g => `<button class="chip" data-g="${g[0]}" aria-pressed="${g[0] === mGroup}">${g[1]}</button>`).join("");
+  $("mFilter").querySelectorAll("button").forEach(b => b.onclick = () => { mGroup = b.dataset.g; buildMorphList(); });
+  const q = $("mSearch").value.trim().toLowerCase(); const g = GROUPS.find(x => x[0] === mGroup)[2];
+  const names = morphNames().filter(n => g(n) && n.toLowerCase().includes(q));
+  $("mCount").textContent = `${names.length} из ${morphNames().length} морфов`;
+  $("mList").innerHTML = names.map(n => {
+    const v = A.manual[n.toLowerCase()] || 0;
+    return `<div class="mrow${v > 0 ? " on" : ""}"><code title="${esc(n)}">${esc(n)}</code><input type="range" min="0" max="1" step="0.01" value="${v}" data-m="${esc(n)}" aria-label="${esc(n)}" id="m_${esc(n)}"><output>${v.toFixed(2)}</output></div>`;
+  }).join("");
+  $("mList").querySelectorAll("input").forEach(inp => inp.oninput = () => {
+    const v = +inp.value; A.manual[inp.dataset.m.toLowerCase()] = v;
+    inp.nextElementSibling.textContent = v.toFixed(2); inp.parentElement.classList.toggle("on", v > 0);
+  });
+}
+$("mSearch").oninput = buildMorphList;
+$("mReset").onclick = () => { A.manual = {}; buildMorphList(); };
+
+/* ============================================================ weights compositor */
+function applyWeights(dt) {
+  const k = 1 - Math.exp(-dt * 26), ke = 1 - Math.exp(-dt * 5);
+  for (const n of new Set([...Object.keys(A.emo), ...Object.keys(A.emoTarget)])) A.emo[n] = (A.emo[n] || 0) + ((A.emoTarget[n] || 0) - (A.emo[n] || 0)) * ke;
+  for (const v of VIS) A.vis[v] = (A.vis[v] || 0) + ((A.visTarget[v] || 0) - (A.vis[v] || 0)) * k;
+  const out = {};
+  for (const [n, w] of Object.entries(A.weights)) setW(out, n.toLowerCase(), w);
+  for (const [n, w] of Object.entries(A.emo)) setW(out, n.toLowerCase(), w);
+  const talking = Object.values(A.vis).reduce((a, b) => a + b, 0);
+  if (talking > 0.01) { // calm the mouth part of the emotion while speaking
+    for (const n of ["jawopen", "mouthfunnel", "mouthpressleft", "mouthpressright"]) if (out[n]) out[n] *= 0.3;
+  }
+  for (const v of VIS) {
+    const w = A.vis[v]; if (w < 0.002) continue;
+    if (A.hasVisemes) setW(out, resolveVis(v), w);
+    else for (const [n, rw] of Object.entries(VIS_RECIPE[v])) setW(out, n.toLowerCase(), rw * w);
+  }
+  for (const [n, w] of Object.entries(A.manual)) setW(out, n, w);
+  for (const m of A.meshes) m.morphTargetInfluences.fill(0);
+  for (const [n, w] of Object.entries(out)) {
+    const hits = A.dict.get(n); if (!hits) continue;
+    for (const [m, i] of hits) m.morphTargetInfluences[i] = clamp(w);
+  }
+  A.weights = {};
+}
+
+/* ============================================================ loop */
+const clock = new THREE.Clock(); let fpsAcc = 0, fpsN = 0, fpsShown = 0;
+const bench = { on: false, frames: [], end: 0 };
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, clock.getDelta());
+  if (camAnim) {
+    camAnim.t = Math.min(1, camAnim.t + dt / 0.6); const e = 1 - Math.pow(1 - camAnim.t, 3);
+    camera.position.lerpVectors(camAnim.from.p, camAnim.to.p, e); controls.target.lerpVectors(camAnim.from.t, camAnim.to.t, e);
+    if (camAnim.t >= 1) camAnim = null;
+  }
+  controls.update();
+  if (A.root) { speechFrame(dt); audioFrame(); lifeFrame(dt); applyWeights(dt); }
+  renderer.render(scene, camera);
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc > 0.5) { fpsShown = fpsN / fpsAcc; $("hudFps").innerHTML = `<b>${fpsShown.toFixed(0)}</b> FPS`; fpsAcc = 0; fpsN = 0; }
+  if (bench.on) { bench.frames.push(dt); if (performance.now() > bench.end) finishBench(); }
+  if (speech.on || !speech.tl) drawStrip();
+}
+
+/* ============================================================ theming */
+function syncTheme() { drawStrip(); }
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncTheme);
+new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* ============================================================ tabs */
+function showTab() {
+  let h = location.hash.slice(1); if (!["speak", "mood", "morphs", "check"].includes(h)) h = "speak";
+  for (const t of ["speak", "mood", "morphs", "check"]) $("tab-" + t).hidden = t !== h;
+  document.querySelectorAll(".tabs a").forEach(a => { if (a.dataset.tab === h) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  if (h === "speak") drawStrip();
+}
+window.addEventListener("hashchange", showTab);
+
+/* ============================================================ speak UI wiring */
+let currentSample = "ru";
+document.querySelectorAll("[data-sample]").forEach(b => b.onclick = () => {
+  currentSample = b.dataset.sample; $("text").value = SAMPLES[currentSample];
+  document.querySelectorAll("[data-sample]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  fillVoices(); speech.tl = null; drawStrip();
+});
+$("text").oninput = () => { speech.tl = null; drawStrip(); };
+$("rate").oninput = (e) => { $("rateO").textContent = (+e.target.value).toFixed(2).replace(/0$/, "") + "×"; if (!speech.on) { speech.tl = null; drawStrip(); } };
+$("art").oninput = (e) => { $("artO").textContent = Math.round(e.target.value * 100) + "%"; };
+$("speakBtn").onclick = speak;
+function fillVoices() {
+  if (!("speechSynthesis" in window)) { $("voice").disabled = true; return; }
+  const want = (LANG[currentSample] || "ru").slice(0, 2);
+  const vs = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith(want));
+  $("voice").innerHTML = `<option value="">По умолчанию (${LANG[currentSample]})</option>` + vs.map(v => `<option>${esc(v.name)}</option>`).join("");
+  if (vs.length) $("voice").value = vs[0].name;
+}
+if ("speechSynthesis" in window) { speechSynthesis.onvoiceschanged = fillVoices; fillVoices(); }
+$("wire").onclick = () => {
+  const on = $("wire").getAttribute("aria-pressed") !== "true"; $("wire").setAttribute("aria-pressed", String(on));
+  A.root && A.root.traverse(o => { if (o.isMesh && o.material && !o.material.isMeshBasicMaterial) o.material.wireframe = on; });
+};
+
+/* ============================================================ spec bar */
+function updateSpecBar(gltf) {
+  const st = sceneStats(gltf.scene);
+  $("hudTris").innerHTML = `<b>${st.tris.toLocaleString("ru-RU")}</b> треуг.`;
+  $("hudDc").innerHTML = `<b>${st.drawCalls}</b> draw call${st.drawCalls === 1 ? "" : "s"}`;
+  const morphs = morphNames().length;
+  $("spec").innerHTML = [
+    `<span class="tag">модель <b>${esc(A.name)}</b></span>`,
+    `<span class="tag"><b>${morphs}</b> морфов</span>`,
+    `<span class="tag"><b>${st.bones}</b> костей</span>`,
+    `<span class="tag">липсинг <b>${A.hasVisemes ? "15 визем" : "через ARKit"}</b></span>`,
+  ].join("");
+}
+function sceneStats(root) {
+  let tris = 0, drawCalls = 0, bones = 0;
+  root.traverse(o => {
+    if (o.isBone) bones++;
+    if (o.isMesh) {
+      const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+      drawCalls += Array.isArray(o.material) ? Math.max(1, g.groups.length) : 1;
+    }
+  });
+  return { tris: Math.round(tris), drawCalls, bones };
+}
+
+/* ============================================================ validator */
+const HUMANOID = ["hips","spine","neck","head","leftshoulder","leftarm","leftforearm","lefthand","rightshoulder","rightarm","rightforearm","righthand",
+  "leftupleg","leftleg","leftfoot","rightupleg","rightleg","rightfoot"];
+const BONE_ALIAS = { leftarm: ["leftupperarm","upperarml","upperarm_l","larm"], rightarm: ["rightupperarm","upperarmr","upperarm_r","rarm"],
+  leftforearm: ["leftlowerarm","lowerarml","forearml"], rightforearm: ["rightlowerarm","lowerarmr","forearmr"],
+  leftupleg: ["leftupperleg","thighl","upperlegl"], rightupleg: ["rightupperleg","thighr","upperlegr"],
+  leftleg: ["leftlowerleg","calfl","shinl"], rightleg: ["rightlowerleg","calfr","shinr"], spine: ["chest","spine01"], hips: ["pelvis","root"] };
+const DEFAULT_NAME = /^(bone|material|object|cube|mesh|texture|image|armature|sphere|plane|cylinder|untitled)?([._ ]?\d{1,4})?$/i;
+
+function glbJson(buf) {
+  try {
+    const dv = new DataView(buf); if (dv.getUint32(0, true) !== 0x46546c67) return null;
+    const len = dv.getUint32(12, true); return JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, len)));
+  } catch (e) { return null; }
+}
+function triInfo(mesh) {
+  const g = mesh.geometry, pos = g.attributes.position, nrm = g.attributes.normal, uv = g.attributes.uv;
+  const idx = g.index ? g.index.array : null, n = idx ? idx.length : pos.count;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), fn = new THREE.Vector3(), vn = new THREE.Vector3();
+  let flipped = 0, degen = 0, total = 0, area = 0, stretchArea = 0;
+  for (let i = 0; i < n; i += 3) {
+    const i0 = idx ? idx[i] : i, i1 = idx ? idx[i + 1] : i + 1, i2 = idx ? idx[i + 2] : i + 2;
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+    e1.subVectors(b, a); e2.subVectors(c, a); fn.crossVectors(e1, e2);
+    const ar = fn.length() / 2; total++;
+    if (ar < 1e-12) { degen++; continue; }
+    area += ar;
+    if (nrm) {
+      vn.set(0, 0, 0); for (const k of [i0, i1, i2]) vn.x += nrm.getX(k), vn.y += nrm.getY(k), vn.z += nrm.getZ(k);
+      if (fn.dot(vn) < 0) flipped++;
+    }
+    if (uv) {
+      const u1 = uv.getX(i1) - uv.getX(i0), v1 = uv.getY(i1) - uv.getY(i0), u2 = uv.getX(i2) - uv.getX(i0), v2 = uv.getY(i2) - uv.getY(i0);
+      const det = u1 * v2 - u2 * v1;
+      if (Math.abs(det) < 1e-14) { stretchArea += ar; continue; }
+      // J = [e1 e2] * inv([[u1,u2],[v1,v2]])
+      const i00 = v2 / det, i01 = -u2 / det, i10 = -v1 / det, i11 = u1 / det;
+      const j0 = [e1.x * i00 + e2.x * i10, e1.y * i00 + e2.y * i10, e1.z * i00 + e2.z * i10];
+      const j1 = [e1.x * i01 + e2.x * i11, e1.y * i01 + e2.y * i11, e1.z * i01 + e2.z * i11];
+      const A_ = j0[0] ** 2 + j0[1] ** 2 + j0[2] ** 2, C_ = j1[0] ** 2 + j1[1] ** 2 + j1[2] ** 2, B_ = j0[0] * j1[0] + j0[1] * j1[1] + j0[2] * j1[2];
+      const tr = A_ + C_, dt = A_ * C_ - B_ * B_, disc = Math.sqrt(Math.max(0, tr * tr / 4 - dt));
+      const l1 = tr / 2 + disc, l2 = Math.max(1e-30, tr / 2 - disc);
+      if (Math.sqrt(l1 / l2) > 3) stretchArea += ar;
+    }
+  }
+  return { flipped, degen, total, area, stretchArea };
+}
+
+function analyze(gltf, buf, fileName) {
+  const json = glbJson(buf) || (gltf.parser && gltf.parser.json) || {};
+  const root = gltf.scene; root.updateMatrixWorld(true);
+  const rows = []; const add = (status, title, value, req, extra) => rows.push({ status, title, value, req, extra });
+  const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); });
+  const st = sceneStats(root);
+
+  // 1 triangles
+  add(st.tris >= 15000 && st.tris <= 35000 ? "pass" : st.tris <= 50000 ? "warn" : "fail",
+    "Полигонаж", `${st.tris.toLocaleString("ru-RU")} треугольников`, "15 000 – 35 000 tris");
+  // 2 draw calls
+  add(st.drawCalls <= 3 ? "pass" : st.drawCalls <= 8 ? "warn" : "fail", "Draw calls", `${st.drawCalls}`, "минимум, атлас текстур");
+  // 3 materials
+  const mats = new Set(); meshes.forEach(m => (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => mats.add(x)));
+  const pbr = [...mats].every(m => m.isMeshStandardMaterial || m.isMeshBasicMaterial);
+  add(pbr ? "pass" : "fail", "Шейдеры", `${mats.size} материал(а), ${pbr ? "PBR metallic-roughness / unlit" : "есть не-PBR материалы"}`, "Unlit или Standard PBR");
+  // 4 textures
+  const texs = new Map(); const roles = { map: 0, normalMap: 0, roughnessMap: 0 };
+  mats.forEach(m => ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap"].forEach(k => {
+    const t = m[k]; if (t && t.image) { texs.set(t.image, t); if (k in roles) roles[k]++; }
+  }));
+  const sizes = [...texs.keys()].map(i => [i.width, i.height]);
+  const pot = sizes.every(([w, h]) => (w & (w - 1)) === 0 && (h & (h - 1)) === 0);
+  const maxS = sizes.length ? Math.max(...sizes.flat()) : 0;
+  const rolesOk = roles.map && roles.normalMap && roles.roughnessMap;
+  add(rolesOk && pot && maxS <= 4096 && maxS >= 1024 ? "pass" : rolesOk ? "warn" : "fail", "Текстуры PBR",
+    `${texs.size} карт · ${[...new Set(sizes.map(s => s.join("×")))].join(", ") || "нет"} · ${["BaseColor", "Normal", "Roughness"].filter((_, i) => [roles.map, roles.normalMap, roles.roughnessMap][i]).join(", ") || "—"}`,
+    "2K/4K BaseColor, Normal, Roughness; размеры степени двойки");
+  // 5 skeleton
+  const bones = {}; root.traverse(o => { if (o.isBone) bones[normBone(o.name)] = o; });
+  const hasBone = (n) => bones[n] || (BONE_ALIAS[n] || []).some(a => bones[a]);
+  const missingB = HUMANOID.filter(n => !hasBone(n));
+  const skinned = meshes.some(m => m.isSkinnedMesh);
+  add(skinned && !missingB.length ? "pass" : skinned && missingB.length <= 4 ? "warn" : "fail", "Гуманоидный риг",
+    `${st.bones} костей · ${skinned ? "skinned mesh" : "нет скиннинга"}`, "иерархия Humanoid (Hips → Spine → Neck → Head, руки, ноги)", missingB);
+  add(hasBone("lefteye") && hasBone("righteye") ? "pass" : "warn", "Кости глаз", hasBone("lefteye") && hasBone("righteye") ? "LeftEye, RightEye" : "не найдены", "для взгляда и трекинга");
+  // skin weights normalised
+  let badW = 0, totW = 0;
+  meshes.filter(m => m.isSkinnedMesh).forEach(m => { const w = m.geometry.attributes.skinWeight; if (!w) return; for (let i = 0; i < w.count; i++) { totW++; const s = w.getX(i) + w.getY(i) + w.getZ(i) + w.getW(i); if (Math.abs(s - 1) > 0.01) badW++; } });
+  if (totW) add(badW === 0 ? "pass" : "warn", "Веса скиннинга", badW ? `${badW} вершин без нормализации` : `${totW.toLocaleString("ru-RU")} вершин, сумма весов = 1`, "до 4 влияний, нормализованы");
+  // 6 ARKit + visemes
+  const names = new Set(); meshes.forEach(m => m.morphTargetDictionary && Object.keys(m.morphTargetDictionary).forEach(k => names.add(k.toLowerCase())));
+  const missA = ARKIT.filter(n => !names.has(n.toLowerCase()));
+  add(!missA.length ? "pass" : missA.length < 10 ? "warn" : "fail", "ARKit-блендшейпы", `${52 - missA.length} из 52`, "52 стандартных имени ARKit", missA);
+  const missV = VIS.filter(v => !(VIS_ALIAS[v] || [v]).some(a => names.has("viseme_" + a.toLowerCase())));
+  add(!missV.length ? "pass" : missV.length < 5 ? "warn" : "fail", "Виземы", `${15 - missV.length} из 15`, "sil PP FF TH DD kk CH SS nn RR aa E ih oh ou", missV.map(v => "viseme_" + v));
+  // 7 isolation
+  rows.push(isolation(meshes, bones));
+  // 8 mesh quality
+  let flipped = 0, degen = 0, total = 0, area = 0, sArea = 0;
+  meshes.forEach(m => { const r = triInfo(m); flipped += r.flipped; degen += r.degen; total += r.total; area += r.area; sArea += r.stretchArea; });
+  const fp = flipped / Math.max(1, total) * 100;
+  add(fp < 0.5 ? "pass" : fp < 3 ? "warn" : "fail", "Нормали", `${flipped} перевёрнутых (${fp.toFixed(2)}%) · ${degen} вырожденных`, "без перевёрнутых нормалей");
+  const sp = sArea / Math.max(1e-9, area) * 100;
+  add(sp < 5 ? "pass" : sp < 15 ? "warn" : "fail", "Растяжения UV", `${sp.toFixed(1)}% площади с анизотропией > 3:1`, "без stretching текстур");
+  // 9 naming
+  const named = [];
+  root.traverse(o => { if (o.isBone || o.isMesh) named.push(o.name); });
+  mats.forEach(m => named.push(m.name)); (json.images || []).forEach(i => named.push(i.name || ""));
+  const bad = named.filter(n => !n || DEFAULT_NAME.test(n) || /[^\x20-\x7E]/.test(n));
+  add(!bad.length ? "pass" : bad.length < 5 ? "warn" : "fail", "Именование", bad.length ? `${bad.length} имён без смысла или не на латинице` : `${named.length} имён, все на английском`,
+    "EyeBlink_L, Viseme_AA, M_Body…", bad.slice(0, 12).map(n => n || "(пусто)"));
+  // 10 size
+  const mb = buf.byteLength / 1048576;
+  add(mb < 10 ? "pass" : mb < 25 ? "warn" : "fail", "Размер файла", `${mb.toFixed(2)} МБ`, "быстрая загрузка в WebGL и на мобильных");
+  // fps placeholder
+  add("info", "Производительность", lastFps ? lastFps : "нажмите «Замерить FPS»", "stable 60 FPS в Three.js на мобильных");
+  return { rows, file: fileName, generator: (json.asset && json.asset.generator) || "—" };
+}
+function isolation(meshes, bones) {
+  // eye geometry = vertices skinned to eye bones + vertices moved by eyeBlink; mouth geometry = vertices moved by jawOpen
+  const mouthRe = /^(jaw|mouth|viseme_|tongue|cheekpuff)/i, eyeRe = /^(eye|brow)/i;
+  let worst = { name: "", mm: 0 }, checked = 0, eyeVerts = 0;
+  for (const m of meshes) {
+    const d = m.morphTargetDictionary, ma = m.geometry.morphAttributes.position; if (!d || !ma) continue;
+    const n = m.geometry.attributes.position.count; const eyeMask = new Uint8Array(n), mouthMask = new Uint8Array(n);
+    const sw = m.geometry.attributes.skinIndex, sk = m.skeleton;
+    if (sw && sk) for (let i = 0; i < n; i++) { const bn = sk.bones[sw.getX(i)]; if (bn && /eye$/i.test(normBone(bn.name)) && m.geometry.attributes.skinWeight.getX(i) > 0.5) eyeMask[i] = 1; }
+    // a zone = vertices that move by at least 25% of that morph's peak (lids for blink, lips/chin for jawOpen)
+    const mark = (name, mask) => {
+      const i = d[Object.keys(d).find(k => k.toLowerCase() === name)]; if (i === undefined) return; const a = ma[i];
+      let mx = 0; const L = new Float32Array(n);
+      for (let v = 0; v < n; v++) { L[v] = Math.hypot(a.getX(v), a.getY(v), a.getZ(v)); if (L[v] > mx) mx = L[v]; }
+      for (let v = 0; v < n; v++) if (mx > 0 && L[v] > mx * 0.25) mask[v] = 1;
+    };
+    mark("eyeblinkleft", eyeMask); mark("eyeblinkright", eyeMask); mark("jawopen", mouthMask);
+    for (let v = 0; v < n; v++) eyeVerts += eyeMask[v];
+    for (const [name, i] of Object.entries(d)) {
+      const a = ma[i]; let mx = 0, inZone = 0; const mask = mouthRe.test(name) ? eyeMask : eyeRe.test(name) ? mouthMask : null;
+      if (!mask) continue; checked++;
+      for (let v = 0; v < n; v++) { const l = Math.hypot(a.getX(v), a.getY(v), a.getZ(v)); if (l > mx) mx = l; if (mask[v] && l > inZone) inZone = l; }
+      const mm = inZone * 1000;
+      if (mx > 0 && inZone > Math.max(1e-4, mx * 0.02) && mm > worst.mm) worst = { name, mm };
+    }
+  }
+  if (!checked) return { status: "warn", title: "Изоляция мимики", value: "нет данных для проверки", req: "губы не деформируют глаза" };
+  return worst.mm > 0
+    ? { status: "fail", title: "Изоляция мимики", value: `${worst.name} сдвигает зону ${/^(eye|brow)/i.test(worst.name) ? "рта" : "глаз"} на ${worst.mm.toFixed(2)} мм`, req: "губы не деформируют глаза и наоборот" }
+    : { status: "pass", title: "Изоляция мимики", value: `${checked} морфов проверено · 0 мм утечки в соседнюю зону`, req: "губы не деформируют глаза и наоборот" };
+}
+
+let report = null, lastFps = null;
+function renderReport() {
+  if (!report) return;
+  const graded = report.rows.filter(r => r.status !== "info"); const ok = graded.filter(r => r.status === "pass").length;
+  const fails = graded.filter(r => r.status === "fail").length;
+  const verdict = fails ? `${fails} критичн. замечан.` : ok === graded.length ? "соответствует ТЗ" : "есть предупреждения";
+  $("score").innerHTML = `<div class="big">${ok}<small>/${graded.length}</small></div><div class="meta"><b>${esc(report.file)}</b><span class="note">${verdict} · ${esc(report.generator)}</span></div>`;
+  $("results").innerHTML = report.rows.map(r => `<div class="res"><span class="pill ${r.status}">${{ pass: "ok", warn: "внимание", fail: "нет", info: "замер" }[r.status]}</span>
+    <div><div class="t">${esc(r.title)}</div><div class="v">${esc(r.value)}</div><div class="r">${esc(r.req)}</div>
+    ${r.extra && r.extra.length ? `<div class="miss">${r.extra.map(x => `<code>${esc(x)}</code>`).join("")}</div>` : ""}</div></div>`).join("");
+}
+async function validateBuffer(buf, name) {
+  $("score").innerHTML = `<div class="big">…</div><div class="meta"><span class="note">проверяю ${esc(name)}</span></div>`;
+  return new Promise((res) => loader.parse(buf.slice(0), "", (g) => { report = analyze(g, buf, name); renderReport(); res(g); },
+    (e) => { $("score").innerHTML = `<div class="big">—</div><div class="meta"><b>${esc(name)}</b><span class="note">Файл не читается как glTF 2.0 (.glb). ${esc(e.message || "")}</span></div>`; $("results").innerHTML = ""; res(null); }));
+}
+$("glbFile").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const buf = await f.arrayBuffer(); await validateBuffer(buf, f.name);
+  loader.parse(buf, "", (g) => { setupModel(g, f.name); applyMood(); setView("face"); }, () => {});
+};
+$("fpsBtn").onclick = () => {
+  if (bench.on) return; bench.on = true; bench.frames = []; bench.end = performance.now() + 5000;
+  $("fpsBtn").disabled = true; $("fpsBtn").textContent = "Замеряю 5 с…";
+  if (!speech.on) speak();
+};
+function finishBench() {
+  bench.on = false; $("fpsBtn").disabled = false; $("fpsBtn").textContent = "Замерить FPS";
+  const f = bench.frames.slice(10).sort((a, b) => b - a); if (!f.length) return;
+  const avg = f.length / f.reduce((a, b) => a + b, 0); const p1 = 1 / f[Math.floor(f.length * 0.01)];
+  const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  lastFps = `${avg.toFixed(0)} FPS среднее · ${p1.toFixed(0)} FPS 1% low · ${mobile ? "мобильное устройство" : "десктоп"}, с липсингом и анимацией`;
+  if (report) { const r = report.rows.find(x => x.title === "Производительность"); r.value = lastFps; r.status = avg >= 55 && p1 >= 45 ? "pass" : avg >= 40 ? "warn" : "fail"; renderReport(); }
+}
+$("copyBtn").onclick = () => {
+  if (!report) return;
+  const txt = `Отчёт Jois Avatar Kit — ${report.file}\n` + report.rows.map(r => `[${r.status.toUpperCase()}] ${r.title}: ${r.value} (ТЗ: ${r.req})${r.extra && r.extra.length ? "\n   нет: " + r.extra.join(", ") : ""}`).join("\n");
+  const done = () => { $("copyBtn").textContent = "Скопировано"; setTimeout(() => $("copyBtn").textContent = "Скопировать отчёт", 1600); };
+  const fb = () => { const t = $("copyfallback"); t.hidden = false; t.value = txt; t.focus(); t.select(); };
+  try { navigator.clipboard.writeText(txt).then(done, fb); } catch (e) { fb(); }
+};
+
+/* ============================================================ public API for the Jois voice engine */
+window.avatar = {
+  /** play viseme events from the speech engine: [{ t: seconds, v: "aa" }, …]; audio is played by the engine itself */
+  say(events, opts = {}) {
+    stopSpeech(); stopAudio();
+    const ev = events.filter(e => VIS.includes(e.v)).sort((a, b) => a.t - b.t);
+    if (!ev.length) return;
+    const segs = ev.map((e, i) => ({ v: e.v, s: e.t, d: Math.max(0.03, (ev[i + 1] ? ev[i + 1].t : e.t + 0.15) - e.t) }));
+    speech.tl = { segs, charTime: [], total: segs[segs.length - 1].s + segs[segs.length - 1].d };
+    speech.t = opts.offset || 0; speech.idx = 0; speech.on = true; speech.started = true; speech.tts = false; speech.ended = true;
+    $("visChip").hidden = false; $("speakBtn").textContent = "Стоп"; $("speakBtn").classList.add("speaking");
+  },
+  /** set one viseme directly, e.g. from a streaming engine: avatar.setViseme("oh", 0.8) */
+  setViseme(v, w = 1, holdSec = 0.25) { if (VIS.includes(v)) A.stream = { v, w: clamp(w), until: life.time + holdSec }; },
+  /** "neutral" | "joy" | "surprise" | "focus" | "empathy", intensity 0..1 */
+  setEmotion(name, k = 0.8) { if (!MOODS.some(m => m.id === name)) return; mood = name; $("intensity").value = k; $("intO").textContent = Math.round(k * 100) + "%"; renderMoods(); applyMood(); },
+  /** look at the camera, or at a point in normalised screen space {x:-1..1, y:-1..1} */
+  lookAt(target) { if (target && "x" in target && "y" in target) { pointer.x = target.x; pointer.y = target.y; pointer.active = true; } else pointer.active = false; },
+  /** raw ARKit / viseme weights, e.g. from a face-tracking stream: avatar.setWeights({ jawOpen: 0.4 }) */
+  setWeights(map) { for (const [k, w] of Object.entries(map)) A.manual[k.toLowerCase()] = clamp(+w); },
+};
+
+/* ============================================================ boot */
+showTab(); renderMoods(); applyMood();
+// local package serves the .glb directly; the hosted page serves a base64 copy
+fetch("jois_avatar.glb").then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).catch(() =>
+fetch("jois_avatar.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(b64 => {
+  const bin = atob(b64.trim()); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8.buffer;
+})).then(buf => {
+  defaultBuffer = buf;
+  loader.parse(buf.slice(0), "", (g) => { setupModel(g, "jois_avatar.glb"); renderMoods(); applyMood(); }, (e) => { $("loading").textContent = "Не удалось загрузить аватар: " + e.message; });
+  validateBuffer(buf, "jois_avatar.glb");
+}).catch(e => { $("loading").textContent = "Не удалось загрузить аватар (" + e.message + ")"; });
+loop();
+</script>
