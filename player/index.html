@@ -132,7 +132,7 @@ pre.code { margin: 0; padding: 10px 12px; background: var(--sunk); border-radius
 
 <div class="app">
   <header class="top">
-    <div class="brand">Jois Avatar Kit <small>v1.0 · MVP</small></div>
+    <div class="brand">Jois Avatar Kit <small>v2.0 · MVP</small></div>
     <div class="spec" id="spec">
       <span class="tag">GLB · <b>загрузка…</b></span>
     </div>
@@ -972,7 +972,8 @@ window.avatar = {
 /* ============================================================ boot */
 showTab(); renderMoods(); applyMood();
 // local package serves the .glb directly; the hosted page serves a base64 copy
-fetch("jois_avatar.glb").then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).catch(() =>
+const getBuf = (u) => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+getBuf("../model/jois_avatar.glb").catch(() => getBuf("jois_avatar.glb")).catch(() =>
 fetch("jois_avatar.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(b64 => {
   const bin = atob(b64.trim()); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   return u8.buffer;
