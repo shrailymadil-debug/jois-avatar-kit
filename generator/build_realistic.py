@@ -359,12 +359,36 @@ Nb_ = vertex_normals(Pb, bp["F"]); Nb_ = np.stack([weld_avg(Nb_[:, i]) for i in 
 off = 0.007 * Wb_s + 0.0045 * Ws_s
 Pi = Pb + Nb_ * off[:, None]
 wsm = np.clip(np.maximum(Wb_s, Ws_s), 0, 1)
-min_off = 0.0035 * wsm
-for it in range(140):
-    lap = np.stack([weld_avg((A @ Pi[:, i]) / deg) for i in range(3)], 1) - Pi
-    Pi = Pi + 0.6 * wsm[:, None] * lap
-    if it % 4 == 3 or it == 139:          # drape: fabric never sinks into the body, so dents fill and bumps spread out
-        dd = ((Pi - Pb) * Nb_).sum(1); Pi = Pi + Nb_ * np.maximum(0, min_off - dd)[:, None]
+# the clothed surface IS the body surface (no skin underneath), so it can simply be low-pass filtered:
+# Taubin smoothing removes centimetre-scale anatomy (nipples, navel, ribs) and keeps the overall silhouette
+def lap_of(P): return np.stack([weld_avg((A @ P[:, i]) / deg) for i in range(3)], 1) - P
+wcl = np.clip(Wb_s * 1.2, 0, 1)[:, None]
+for it in range(160):
+    Pi = Pi + 0.62 * wcl * lap_of(Pi)
+    Pi = Pi - 0.66 * wcl * lap_of(Pi)
+for it in range(25):
+    Pi = Pi + 0.5 * (np.clip(Ws_s, 0, 1)[:, None]) * lap_of(Pi)     # shoes: smooth out toes
+# bust under the blazer: find each breast's most forward point and relax a 4 cm patch around it into a soft dome
+chest_y = (B["spine02"]["head"][1] + collar_y) / 2 - 0.06
+for sgn in (1, -1):
+    cand = (np.sign(Pb[:, 0]) == sgn) & (np.abs(Pb[:, 0]) > 0.03) & (np.abs(Pb[:, 0]) < 0.14) & (np.abs(Pb[:, 1] - chest_y) < 0.10) & (wcl[:, 0] > 0.5)
+    if not cand.any(): continue
+    ci = np.where(cand)[0]; top = ci[np.argsort(-Pb[ci, 2])[:60]]
+    tip = Pb[top].mean(0)
+    wl = (np.clip(1 - norm(Pb - tip) / 0.075, 0, 1) ** 1.2 * wcl[:, 0])[:, None]
+    for it in range(200):
+        Pi = Pi + 0.5 * wl * lap_of(Pi)
+    # dense vertex cluster at the old nipple: rebuild its height from a smooth quadratic fitted to the surrounding ring
+    rxy = np.hypot(Pi[:, 0] - tip[0], Pi[:, 1] - tip[1]); front = Pi[:, 2] > tip[2] - 0.04
+    inner = front & (rxy < 0.034); ring = front & (rxy >= 0.034) & (rxy < 0.06)
+    xx_, yy_ = Pi[ring, 0] - tip[0], Pi[ring, 1] - tip[1]
+    M_ = np.stack([np.ones_like(xx_), xx_, yy_, xx_ ** 2, xx_ * yy_, yy_ ** 2], 1)
+    coef, *_ = np.linalg.lstsq(M_, Pi[ring, 2], rcond=None)
+    xi, yi = Pi[inner, 0] - tip[0], Pi[inner, 1] - tip[1]
+    zfit = np.stack([np.ones_like(xi), xi, yi, xi ** 2, xi * yi, yi ** 2], 1) @ coef
+    blend = ss(0.034, 0.008, rxy[inner])
+    Pi[inner, 2] = Pi[inner, 2] * (1 - blend) + zfit * blend
+    log("bust relaxed around", tip.round(3), "patch", int(inner.sum()), "verts")
 bp["V"] = Pi
 bp["W_BLAZER"], bp["W_SHOE"], bp["W_LEGS"] = W_BLAZER, W_SHOE, W_LEGS
 
