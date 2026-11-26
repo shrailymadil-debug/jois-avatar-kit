@@ -38,13 +38,19 @@ TARGETS_W = {
     "macrodetails/height/female-young-averagemuscle-averageweight-maxheight.target": 0.15,
     "breast/female-young-averagemuscle-averageweight-mincup-averagefirmness.target": 0.55,
     "head/head-oval.target": 0.5, "head/head-fat-decr.target": 0.25,
-    "eyes/l-eye-scale-incr.target": 0.35, "eyes/r-eye-scale-incr.target": 0.35,
+    "eyes/l-eye-scale-incr.target": 0.5, "eyes/r-eye-scale-incr.target": 0.5,
+    "eyes/l-eye-corner2-up.target": 0.35, "eyes/r-eye-corner2-up.target": 0.35,
+    "eyes/l-eye-bag-decr.target": 0.6, "eyes/r-eye-bag-decr.target": 0.6,
+    "breast/nipple-size-decr.target": 1.0, "breast/nipple-point-decr.target": 1.0,
+    "nose/nose-hump-decr.target": 0.4, "nose/nose-point-up.target": 0.25, "nose/nose-volume-decr.target": 0.2,
+    "mouth/mouth-cupidsbow-incr.target": 0.35, "mouth/mouth-scale-horiz-decr.target": 0.12,
+    "cheek/l-cheek-volume-decr.target": 0.25, "cheek/r-cheek-volume-decr.target": 0.25,
     "eyes/l-eye-height2-incr.target": 0.25, "eyes/r-eye-height2-incr.target": 0.25,
     "nose/nose-scale-horiz-decr.target": 0.3, "nose/nose-scale-depth-decr.target": 0.15,
     "nose/nose-point-width-decr.target": 0.35, "nose/nose-nostrils-width-decr.target": 0.3,
-    "mouth/mouth-lowerlip-volume-decr.target": 0.1, "mouth/mouth-scale-vert-decr.target": 0.1, "mouth/mouth-scale-horiz-decr.target": 0.05,
+    "mouth/mouth-lowerlip-volume-decr.target": 0.15, "mouth/mouth-upperlip-volume-decr.target": 0.1, "mouth/mouth-scale-horiz-decr.target": 0.05,
     "mouth/mouth-angles-up.target": 0.3,
-    "chin/chin-width-decr.target": 0.35, "chin/chin-height-decr.target": 0.15,
+    "chin/chin-width-decr.target": 0.5, "chin/chin-height-decr.target": 0.15,
     "cheek/l-cheek-bones-incr.target": 0.15, "cheek/r-cheek-bones-incr.target": 0.15,
 }
 V = apply_targets(V0, TARGETS_W)
@@ -350,14 +356,15 @@ def smooth(x, it):
     return x
 Wb_s = smooth(W_BLAZER, 3); Ws_s = smooth(W_SHOE, 3)
 Nb_ = vertex_normals(Pb, bp["F"]); Nb_ = np.stack([weld_avg(Nb_[:, i]) for i in range(3)], 1); Nb_ /= norm(Nb_)[:, None]
-off = 0.0075 * Wb_s + 0.0045 * Ws_s
+off = 0.007 * Wb_s + 0.0045 * Ws_s
 Pi = Pb + Nb_ * off[:, None]
-wsm = np.clip(np.maximum(Wb_s, Ws_s), 0, 1)[:, None]
-for _ in range(25):
+wsm = np.clip(np.maximum(Wb_s, Ws_s), 0, 1)
+min_off = 0.0035 * wsm
+for it in range(140):
     lap = np.stack([weld_avg((A @ Pi[:, i]) / deg) for i in range(3)], 1) - Pi
-    Pi = Pi + 0.5 * wsm * lap
-# keep the fabric outside the skin after smoothing
-dd = ((Pi - Pb) * Nb_).sum(1); Pi = Pi + Nb_ * np.maximum(0, 0.004 * wsm[:, 0] - dd)[:, None]
+    Pi = Pi + 0.6 * wsm[:, None] * lap
+    if it % 4 == 3 or it == 139:          # drape: fabric never sinks into the body, so dents fill and bumps spread out
+        dd = ((Pi - Pb) * Nb_).sum(1); Pi = Pi + Nb_ * np.maximum(0, min_off - dd)[:, None]
 bp["V"] = Pi
 bp["W_BLAZER"], bp["W_SHOE"], bp["W_LEGS"] = W_BLAZER, W_SHOE, W_LEGS
 
@@ -379,24 +386,40 @@ def smin(a, b, k):
     h = np.clip(0.5 + 0.5 * (b - a) / k, 0, 1); return b * (1 - h) + a * h - k * h * (1 - h)
 def smax(a, b, k): return -smin(-a, -b, k)
 CHIN_Y = MOUTH_Y - 0.040
+SHOULDER_Y = (B["clavicle.L"]["head"][1] + B["upperarm01.L"]["head"][1]) / 2
+HEM_Y = SHOULDER_Y - 0.17                     # hair ends a little below the shoulder blades
+BODY_V = bp["V"][~head_mask]; BODY_N = Nb_[~head_mask]; body_tree = cKDTree(BODY_V)
+def body_sdf(P):
+    d, i = body_tree.query(P); s = np.sign(((P - BODY_V[i]) * BODY_N[i]).sum(1)); return d * s
 _hw = np.abs(HP[np.abs(HP[:, 1] - EYE_L[1]) < 0.01, 0]).max()      # head half-width at eye level
 def hair_sdf(P):
     x, y, z = P[:, 0] - SC[0], P[:, 1], P[:, 2]
     hd = head_sdf(P)
-    d = hd - 0.009
-    rx, rz = _hw + 0.024, SR[2] * 1.10
-    cy = SC[1] - 0.005; ry = (SC[1] + SR[1] + 0.016) - cy
+    d = hd - 0.008
+    rx, rz = _hw + 0.020, SR[2] * 1.06
+    cy = SC[1] - 0.005; ry = (SC[1] + SR[1] + 0.014) - cy
     qy = np.maximum(0, y - cy) / ry
-    bob = (np.sqrt((x / rx) ** 2 + ((z - (SC[2] - 0.014)) / rz) ** 2 + qy ** 2) - 1) * min(rx, rz)
-    d = smin(d, bob, 0.02)
-    bang = brow_y + 0.003 + 0.0022 * np.sin(x * 260) + 0.0012 * np.sin(x * 97)
-    win = np.maximum(np.maximum(SC[2] + 0.028 - z, np.abs(x) - (_hw - 0.012)), y - bang)
+    flare = 1 + 0.35 * np.clip((CHIN_Y - y) / 0.25, 0, 1)            # strands fall wider over the shoulders
+    long_ = (np.sqrt((x / (rx * flare)) ** 2 + ((z - (SC[2] - 0.022)) / (rz * (0.9 + 0.1 * flare))) ** 2 + qy ** 2) - 1) * min(rx, rz)
+    d = smin(d, long_, 0.02)
+    # face window with straight, slightly wispy bangs
+    bang = brow_y + 0.002 + 0.0022 * np.sin(x * 260) + 0.0012 * np.sin(x * 97)
+    win = np.maximum(np.maximum(SC[2] + 0.028 - z, np.abs(x) - (_hw - 0.014)), y - bang)
     d = smax(d, -win, 0.007)
-    hem = CHIN_Y + 0.010 * np.clip((SC[2] - z) / 0.08, 0, 1)
-    d = smax(d, hem - y, 0.01)
+    # below the chin keep only the side curtains in front, nothing over the chest centre
+    front = np.maximum(np.maximum(SC[2] + 0.005 - z, np.abs(x) - (_hw - 0.006)), y - (CHIN_Y + 0.01))
+    d = smax(d, -front, 0.012)
+    # layered ends: a soft V at the back, slightly shorter in front
+    hem = HEM_Y + 0.05 * np.clip((z - (SC[2] - 0.05)) / 0.12, 0, 1) + 0.010 * np.abs(np.sin(x * 55)) + 0.006 * np.sin(x * 130)
+    d = smax(d, hem - y, 0.012)
+    # never inside the body (hair rests on the shoulders and back)
+    low = y < CHIN_Y + 0.01                       # only the lower hair can meet the shoulders and back
+    bs = np.ones(len(P))
+    if low.any(): bs[low] = body_sdf(P[low]) - 0.007
+    d = smax(d, -bs, 0.006)
     return d
-lo = np.array([SC[0] - 0.13, CHIN_Y - 0.03, SC[2] - 0.14]); hi = np.array([SC[0] + 0.13, SC[1] + SR[1] + 0.04, SC[2] + 0.14])
-vox = 0.0022
+lo = np.array([SC[0] - 0.19, HEM_Y - 0.03, SC[2] - 0.16]); hi = np.array([SC[0] + 0.19, SC[1] + SR[1] + 0.04, SC[2] + 0.14])
+vox = 0.0026
 n = np.ceil((hi - lo) / vox).astype(int) + 1
 xs = lo[0] + np.arange(n[0]) * vox; ys = lo[1] + np.arange(n[1]) * vox; zs = lo[2] + np.arange(n[2]) * vox
 Yg, Zg = np.meshgrid(ys, zs, indexing="ij"); vol = np.empty(n, np.float32)
@@ -406,8 +429,16 @@ HVv, HF, _, _ = measure.marching_cubes(vol, 0.0, spacing=(vox, vox, vox)); HVv +
 def signed_volume(P, F): return np.einsum("ij,ij->i", P[F[:, 0]], np.cross(P[F[:, 1]], P[F[:, 2]])).sum() / 6
 if signed_volume(HVv, HF) < 0: HF = HF[:, [0, 2, 1]]
 # drop surface buried in the head
-c = HVv[HF].mean(1); HF = HF[head_sdf(c) > 0.002]
+c = HVv[HF].mean(1); _bs = np.ones(len(c)); _lo = c[:, 1] < CHIN_Y + 0.01; _bs[_lo] = body_sdf(c[_lo])
+HF = HF[(head_sdf(c) > 0.002) & (_bs > 0.002)]
 used = np.unique(HF); rm = -np.ones(len(HVv), int); rm[used] = np.arange(len(used)); HVv = HVv[used]; HF = rm[HF]
+from scipy.sparse.csgraph import connected_components
+_e = np.concatenate([HF[:, [0, 1]], HF[:, [1, 2]]])
+_ncomp, _lab = connected_components(sparse.coo_matrix((np.ones(len(_e)), (_e[:, 0], _e[:, 1])), shape=(len(HVv), len(HVv))), directed=False)
+_sizes = np.bincount(_lab[HF[:, 0]], minlength=_ncomp)
+HF = HF[_sizes[_lab[HF[:, 0]]] > 0.02 * len(HF)]
+used = np.unique(HF); rm = -np.ones(len(HVv), int); rm[used] = np.arange(len(used)); HVv = HVv[used]; HF = rm[HF]
+log("hair components kept", int((_sizes > 0.02 * _sizes.sum()).sum()), "of", _ncomp)
 def taubin(P, F, it=6, lam=0.5, mu=-0.53):
     n_ = len(P); e = np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]]); e = np.concatenate([e, e[:, ::-1]])
     A_ = sparse.coo_matrix((np.ones(len(e)), (e[:, 0], e[:, 1])), shape=(n_, n_)).tocsr(); A_.data[:] = 1
@@ -416,7 +447,7 @@ def taubin(P, F, it=6, lam=0.5, mu=-0.53):
         P = P + lam * (A_ @ P / dg - P); P = P + mu * (A_ @ P / dg - P)
     return P
 HVv = taubin(HVv, HF, 6)
-HV2, HF2 = fast_simplification.simplify(HVv.astype(np.float32), HF.astype(np.int32), 1 - 3600 / len(HF))
+HV2, HF2 = fast_simplification.simplify(HVv.astype(np.float32), HF.astype(np.int32), 1 - 4400 / len(HF))
 HVv, HF = HV2.astype(float), HF2.astype(np.int64)
 if signed_volume(HVv, HF) < 0: HF = HF[:, [0, 2, 1]]
 HN = vertex_normals(HVv, HF)
@@ -426,7 +457,7 @@ for nm, m in (("hair", (fny <= 0.75) & (fny >= -0.6)), ("hair_cap", fny > 0.75),
     Fm = HF[m]; used = np.unique(Fm); rm = -np.ones(len(HVv), int); rm[used] = np.arange(len(used))
     Pp = HVv[used]
     if nm == "hair":
-        q = Pp - SC; lam = np.arctan2(q[:, 0], q[:, 2]); th = (SC[1] + SR[1] - Pp[:, 1]) / 0.30
+        q = Pp - SC; lam = np.arctan2(q[:, 0], q[:, 2]); th = (SC[1] + SR[1] - Pp[:, 1]) / (SC[1] + SR[1] - HEM_Y + 0.02)
         uu = lam / (2 * math.pi) + 0.5
         # seam at the back: duplicate wrapping faces
         Fl = rm[Fm]; uf = uu[Fl]; wrap = (uf.max(1) - uf.min(1)) > 0.5
@@ -446,7 +477,10 @@ for nm, m in (("hair", (fny <= 0.75) & (fny >= -0.6)), ("hair_cap", fny > 0.75),
         uv = np.stack([(x0 + 4 + (Pp[:, 0] - Pp[:, 0].min()) / sc_ * (w - 8)) / 4096, (y0 + 4 + (Pp[:, 2] - Pp[:, 2].min()) / sc_ * (h - 8)) / 4096], 1)
         F_ = rm[Fm]
     hp = dict(name=nm, base=None, F=F_, V=Pp, uv=uv, D={n_: np.zeros_like(Pp) for n_ in TARGET_NAMES})
-    hp["J"] = np.tile([RBI["Head"], 0, 0, 0], (len(Pp), 1)); hp["W"] = np.tile([1., 0, 0, 0], (len(Pp), 1))
+    # upper hair follows the head, the ends lying on the shoulders follow the upper back
+    wb_ = ss(CHIN_Y + 0.02, SHOULDER_Y - 0.02, Pp[:, 1])          # 0 at the chin -> 1 at the shoulders
+    hp["J"] = np.tile([RBI["Head"], RBI["Spine2"], RBI["Neck"], 0], (len(Pp), 1))
+    hp["W"] = np.stack([1 - wb_, wb_ * 0.7, wb_ * 0.3, np.zeros(len(Pp))], 1)
     hp["N"] = HN[used] if nm != "hair" else vertex_normals(Pp, F_)
     parts.append(hp)
 log("hair tris", len(HF))
@@ -539,8 +573,8 @@ EL, ER = [F(x) for x in EYE_L], [F(x) for x in EYE_R]; MYf = F(MOUTH_Y); HCz = F
 SCx, SCy, SCz, SRy = F(SC[0]), F(SC[1]), F(SC[2]), F(SR[1])
 COLLAR = F(collar_y); SP2z = F(B["spine02"]["head"][2])
 SKIN = hexc("#E9BB9C"); SKIN_RED = hexc("#DE8F7E")
-BLAZER = hexc("#B98B5E"); SHIRT = hexc("#F4F2EE"); TIE = hexc("#A8332F"); TIGHTS = hexc("#151517"); SHOE = hexc("#121212")
-LIP = hexc("#BC5E60")
+BLAZER = hexc("#252E45"); SHIRT = hexc("#F5F4F0"); TIE = hexc("#9E2B33"); TIGHTS = hexc("#18181B"); SHOE = hexc("#141416")
+LIP = hexc("#C8656C")
 ex0, ey0, ew, eh = TILES["eye"]
 EYE_IMG = np.asarray(Image.open(f"{MH}/eyes/materials/brown_eye.png").convert("RGB").resize((ew - 8, eh - 8)), np.float32) / 255
 PAD_R = 24
@@ -554,9 +588,9 @@ def paint(r0, r1):
     base = np.zeros(px.shape + (3,), np.float32); rough = np.full(px.shape, 0.55, np.float32); height = np.zeros(px.shape, np.float32)
     def g2(cx, cy, sx, sy): return np.exp(-(((px - cx) / sx) ** 2 + ((py - cy) / sy) ** 2))
     is_body = grp == GID["body"]
-    col = SKIN * (0.95 + 0.06 * nlo[..., None]) * (0.985 + 0.03 * nmid[..., None])
+    col = SKIN * (0.975 + 0.03 * nlo[..., None]) * (0.993 + 0.014 * nmid[..., None])
     ff = is_body & (pz > HCz - 0.05) & (py > MYf - 0.06) & (py < EL[1] + 0.08)
-    warm = (g2(0.045, EL[1] - 0.035, 0.024, 0.018) + g2(-0.045, EL[1] - 0.035, 0.024, 0.018)) * ff * 0.45
+    warm = (g2(0.045, EL[1] - 0.033, 0.022, 0.016) + g2(-0.045, EL[1] - 0.033, 0.022, 0.016)) * ff * 0.6
     warm = warm + g2(0.0, (EL[1] + MYf) / 2 - 0.008, 0.010, 0.012) * ff * 0.45
     col = mix(col, np.broadcast_to(SKIN_RED, col.shape), np.clip(warm, 0, 1) * 0.55)
     for e in (EL, ER):
@@ -565,25 +599,25 @@ def paint(r0, r1):
     for sgn, e in ((1, EL), (-1, ER)):
         t = np.clip((sgn * px - 0.010) / 0.050, 0, 1)
         by = e[1] + 0.0185 + 0.0055 * np.sin(t * math.pi * 0.95) - 0.004 * t
-        th = 0.0026 * (1 - 0.55 * t) + 0.0005
+        th = 0.0021 * (1 - 0.6 * t) + 0.0004
         inb = (np.abs(py - by) < th) & (sgn * px > 0.010) & (sgn * px < 0.062) & ff & (pz > e[2] - 0.015)
         col = mix(col, np.broadcast_to(hexc("#33241F"), col.shape), np.clip(blur(inb, 3.0) * 0.85, 0, 1))
     lipzone = ff & (np.abs(py - MYf) < 0.011) & (np.abs(px) < 0.026)
-    lipm = blur(lipzone & (((px / 0.0225) ** 2 + ((py - MYf - 0.0005) / 0.0095) ** 2) < 1), 3)
+    lipm = blur(lipzone & (((px / 0.0205) ** 2 + ((py - MYf - 0.0004) / 0.0085) ** 2) < 1), 2.5)
     col = mix(col, LIP * (0.93 + 0.1 * nmid[..., None]), np.clip(lipm * 1.2, 0, 1) * 0.85)
     near_eye = ff & ((np.abs(np.abs(px) - abs(EL[0])) < 0.03) & (np.abs(py - EL[1]) < 0.02))
     if near_eye.any():
         pts = P_[near_eye]
         du, _ = LASH_UP.query(pts); dl, _ = LASH_LO.query(pts)
         lash = np.zeros(px.shape, np.float32)
-        lash[near_eye] = np.maximum(np.clip(1.25 * np.exp(-(du / 0.0024) ** 2), 0, 1), np.exp(-(dl / 0.0012) ** 2) * 0.5)
+        lash[near_eye] = np.maximum(np.clip(1.4 * np.exp(-(du / 0.0030) ** 2), 0, 1), np.exp(-(dl / 0.0014) ** 2) * 0.55)
         col = mix(col, np.broadcast_to(hexc("#1A1210"), col.shape), lash)
     line = np.exp(-((py - MYf) / 0.0012) ** 2) * (np.abs(px) < 0.024) * ff
     col = mix(col, np.broadcast_to(hexc("#8A4A48"), col.shape), line * 0.45)
     skin_rough = 0.5 - 0.15 * lipm
     # outfit
     wb, wsh, wl = aux[..., 0], aux[..., 1], aux[..., 2]
-    twill = 0.5 + 0.5 * np.sin((xx + yy) * 0.9)
+    twill = 0.5 + 0.5 * np.sin((xx + yy) * 0.35)
     blz = BLAZER * (0.92 + 0.1 * nlo[..., None]) * (0.95 + 0.07 * twill[..., None])
     chest = pz > SP2z + 0.02
     vtop = COLLAR - 0.13
@@ -594,8 +628,10 @@ def paint(r0, r1):
     outfit = mix(outfit, TIE * (0.92 + 0.08 * twill[..., None]), tie.astype(np.float32))
     outfit = mix(outfit, outfit * 0.65, blur(lapel, 2))
     for by_ in (COLLAR - 0.16, COLLAR - 0.215):
-        btn = chest & (px ** 2 + (py - by_) ** 2 < 0.0055 ** 2)
-        outfit = mix(outfit, np.broadcast_to(hexc("#4A3424"), outfit.shape), blur(btn, 1.2))
+        btn = chest & ((px - 0.012) ** 2 + (py - by_) ** 2 < 0.0042 ** 2)
+        outfit = mix(outfit, np.broadcast_to(hexc("#B8954E"), outfit.shape), blur(btn, 1.0) * 0.85)
+    torso_zone = is_body & (np.abs(px) < 0.13) & (py < COLLAR + 0.03) & (py > COLLAR - 0.35)
+    wb = np.where(torso_zone, ss(COLLAR + 0.004, COLLAR - 0.004, py), wb)
     bc = mix(col, outfit, np.clip(wb * 1.3, 0, 1))
     legs = mix(col, TIGHTS * (0.9 + 0.2 * nmid[..., None]) + col * 0.12, np.clip(wl, 0, 1) * (1 - np.clip(wb, 0, 1)))
     bc = np.where(((wl > 0.01) & (wb < 0.5))[..., None], legs, bc)
@@ -606,10 +642,18 @@ def paint(r0, r1):
     bc = mix(bc, SHIRT * (0.95 + 0.05 * nmid[..., None]), np.clip(collar_w, 0, 1))
     base[is_body] = bc[is_body]
     rough[is_body] = np.where(wb > 0.5, 0.82, np.where(wsh > 0.5, 0.28, np.where(wl > 0.5, 0.5, skin_rough)))[is_body]
-    height[is_body] = np.where(wb > 0.5, 0.5 * twill, 0.18 * nhi)[is_body]
+    height[is_body] = np.where(wb > 0.5, 0.18 * twill, 0.04 * nhi)[is_body]
     m = grp == GID["skirt"]
-    skc = hexc("#4B4E57") * (0.85 + 0.2 * (0.5 + 0.5 * aux[..., 3])[..., None]) * (0.95 + 0.07 * twill[..., None])
-    base[m] = skc[m]; rough[m] = 0.85; height[m] = (0.5 * twill)[m]
+    # navy-and-grey tartan with a thin red line, shaded by the pleats
+    ang_ = np.arctan2(px, pz - SP2z); u_ = ang_ * 0.12; v_ = py
+    bandA = (np.abs(((u_ / 0.028) % 1) - 0.5) < 0.17).astype(np.float32)
+    bandB = (np.abs(((v_ / 0.028) % 1) - 0.5) < 0.17).astype(np.float32)
+    redl = ((np.abs(((u_ / 0.028) % 1) - 0.06) < 0.025) | (np.abs(((v_ / 0.028) % 1) - 0.06) < 0.025)).astype(np.float32)
+    skc = hexc("#4A505E") * (1 - 0.32 * np.clip(bandA + bandB, 0, 1.5)[..., None])
+    skc = mix(skc, np.broadcast_to(hexc("#22283A"), skc.shape), bandA * bandB * 0.6)
+    skc = mix(skc, np.broadcast_to(hexc("#8E2A32"), skc.shape), blur(redl, 0.8) * 0.7)
+    skc = skc * (0.82 + 0.24 * (0.5 + 0.5 * aux[..., 3])[..., None])
+    base[m] = skc[m]; rough[m] = 0.85; height[m] = (0.15 * twill)[m]
     for nm, c in (("teethU", "#F1ECE2"), ("teethD", "#EDE6DA"), ("tongue", "#C4646E")):
         m = grp == GID[nm]; base[m] = hexc(c); rough[m] = 0.3
     m = (grp == GID["hair"]) | (grp == GID.get("hair_cap", -9)) | (grp == GID.get("hair_bot", -9))
