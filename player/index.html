@@ -982,7 +982,21 @@ window.avatar = {
 /* ============================================================ boot */
 showTab(); renderMoods(); applyMood();
 // local package serves the .glb directly; the hosted page serves a base64 copy
-const getBuf = (u) => fetch(u, { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+// stream the download so a slow connection shows real progress instead of a frozen "loading"
+const getBuf = async (u) => {
+  const r = await fetch(u, { cache: "no-cache" }); if (!r.ok) throw new Error(r.status);
+  const total = +r.headers.get("content-length") || 0;
+  if (!r.body || !r.body.getReader) return r.arrayBuffer();
+  const rd = r.body.getReader(); const chunks = []; let got = 0;
+  for (;;) {
+    const { done, value } = await rd.read(); if (done) break;
+    chunks.push(value); got += value.length;
+    const mb = (got / 1048576).toFixed(1);
+    $("loading").textContent = total ? `загружаю аватар… ${Math.round(got / total * 100)}% (${mb} из ${(total / 1048576).toFixed(1)} МБ)` : `загружаю аватар… ${mb} МБ`;
+  }
+  const out = new Uint8Array(got); let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out.buffer;
+};
 getBuf("../model/jois_avatar.glb").catch(() => getBuf("jois_avatar.glb")).catch(() =>
 fetch("jois_avatar.glb.b64.txt").then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(b64 => {
   const bin = atob(b64.trim()); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
