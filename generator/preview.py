@@ -1,4 +1,5 @@
 """Offline orthographic preview of the last build: python3 preview.py out.png "jawOpen=1,eyeBlinkLeft=1" [zoom]"""
+import os
 import sys, numpy as np
 from PIL import Image
 d = np.load(__file__.replace("preview.py", "last_build.npz"))
@@ -9,7 +10,7 @@ for kv in filter(None, spec.split(",")):
 yaw = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
 c, s = np.cos(yaw), np.sin(yaw)
 R = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
-cen = np.array([0, float(d["eye"][1]) - 0.035, 0.0]) if "eye" in d.files else np.array([0, 1.395, 0.0]); half = float(sys.argv[3]) if len(sys.argv) > 3 else 0.14
+cen = np.array([0, float(d["eye"][1]) - float(os.environ.get("PREVIEW_DY", "0.035")), 0.0]) if "eye" in d.files else np.array([0, 1.395, 0.0]); half = float(sys.argv[3]) if len(sys.argv) > 3 else 0.14
 P = (V - cen) @ R.T; Nn = N @ R.T
 W = H = int(sys.argv[5]) if len(sys.argv) > 5 else 700
 X = (P[:, 0] / half * 0.5 + 0.5) * W; Y = (0.5 - P[:, 1] / half * 0.5) * H; Z = P[:, 2]

@@ -48,10 +48,13 @@ TARGETS_W = {
     "eyes/l-eye-height2-incr.target": 0.25, "eyes/r-eye-height2-incr.target": 0.25,
     "nose/nose-scale-horiz-decr.target": 0.3, "nose/nose-scale-depth-decr.target": 0.15,
     "nose/nose-point-width-decr.target": 0.35, "nose/nose-nostrils-width-decr.target": 0.3,
-    "mouth/mouth-lowerlip-volume-decr.target": 0.15, "mouth/mouth-upperlip-volume-decr.target": 0.1, "mouth/mouth-scale-horiz-decr.target": 0.05,
+    "mouth/mouth-lowerlip-volume-decr.target": 0.3, "mouth/mouth-upperlip-volume-decr.target": 0.2, "mouth/mouth-scale-horiz-decr.target": 0.05,
     "mouth/mouth-angles-up.target": 0.3,
     "chin/chin-width-decr.target": 0.5, "chin/chin-height-decr.target": 0.15,
     "cheek/l-cheek-bones-incr.target": 0.15, "cheek/r-cheek-bones-incr.target": 0.15,
+    "head/head-invertedtriangular.target": 0.35, "head/head-age-decr.target": 0.5, "head/head-scale-horiz-decr.target": 0.12,
+    "chin/chin-triangle.target": 0.3, "chin/chin-bones-decr.target": 0.4, "chin/chin-jaw-drop-decr.target": 0.3,
+    "neck/neck-scale-horiz-decr.target": 0.35, "cheek/l-cheek-trans-up.target": 0.15, "cheek/r-cheek-trans-up.target": 0.15,
 }
 V = apply_targets(V0, TARGETS_W)
 BONES = skeleton(V); WTS = load_weights()
@@ -280,6 +283,14 @@ for p in parts:
     p["D"] = {n: SHAPES[n][p["base"]] for n in TARGET_NAMES}
     p["J"], p["W"] = top4(RW[p["base"]])
 
+# teeth: a touch narrower and deeper, so their corners stay inside the slimmer lower face when she smiles
+for p in parts:
+    if p["name"] in ("teethU", "teethD"):
+        c_ = p["V"].mean(0)
+        p["V"][:, 0] = c_[0] + (p["V"][:, 0] - c_[0]) * 0.86
+        p["V"][:, 2] -= 0.0025
+        for n_ in p["D"]: p["D"][n_][:, 0] *= 0.86
+
 # skirt: shorten to mid-thigh, flare, pleats
 sk = skirt
 hip_y = B["upperleg01.L"]["head"][1]
@@ -389,8 +400,21 @@ for sgn in (1, -1):
     blend = ss(0.034, 0.008, rxy[inner])
     Pi[inner, 2] = Pi[inner, 2] * (1 - blend) + zfit * blend
     log("bust relaxed around", tip.round(3), "patch", int(inner.sum()), "verts")
+# whole front of the torso under the blazer: heavy low-pass so the fabric reads as one smooth shell
+spz = B["spine02"]["head"][2]
+fr = (np.clip(Wb_s, 0, 1) * ss(spz - 0.01, spz + 0.04, Pb[:, 2]) * ss(blazer_hem + 0.01, blazer_hem + 0.05, Pb[:, 1])
+      * ss(collar_y - 0.02, collar_y - 0.07, Pb[:, 1]) * ~dom_is("upperarm", "lowerarm"))[:, None]
+for it in range(300):
+    Pi = Pi + 0.6 * fr * lap_of(Pi)
+    Pi = Pi - 0.62 * fr * lap_of(Pi)
+for it in range(60):
+    Pi = Pi + 0.5 * fr * lap_of(Pi)
+# keep the fabric outside the skin everywhere
+# (not on the smoothed front: there the fabric replaces the skin, and pushing it out would bring the anatomy back)
+dd = ((Pi - Pb) * Nb_).sum(1); Pi = Pi + Nb_ * (np.maximum(0, 0.003 * np.clip(Wb_s, 0, 1) - dd) * (1 - fr[:, 0]))[:, None]
 bp["V"] = Pi
 bp["W_BLAZER"], bp["W_SHOE"], bp["W_LEGS"] = W_BLAZER, W_SHOE, W_LEGS
+bp["FR"] = fr[:, 0]
 
 # ------------------------------------------------------------------ 7. hair: chin-length bob with straight bangs
 log("hair")
@@ -411,7 +435,7 @@ def smin(a, b, k):
 def smax(a, b, k): return -smin(-a, -b, k)
 CHIN_Y = MOUTH_Y - 0.040
 SHOULDER_Y = (B["clavicle.L"]["head"][1] + B["upperarm01.L"]["head"][1]) / 2
-HEM_Y = SHOULDER_Y - 0.17                     # hair ends a little below the shoulder blades
+HEM_Y = SHOULDER_Y - 0.27                     # hair ends at mid-back
 BODY_V = bp["V"][~head_mask]; BODY_N = Nb_[~head_mask]; body_tree = cKDTree(BODY_V)
 def body_sdf(P):
     d, i = body_tree.query(P); s = np.sign(((P - BODY_V[i]) * BODY_N[i]).sum(1)); return d * s
@@ -419,12 +443,14 @@ _hw = np.abs(HP[np.abs(HP[:, 1] - EYE_L[1]) < 0.01, 0]).max()      # head half-w
 def hair_sdf(P):
     x, y, z = P[:, 0] - SC[0], P[:, 1], P[:, 2]
     hd = head_sdf(P)
+    hd = np.where(y < CHIN_Y - 0.03, np.maximum(hd, 0.05), hd)    # its sign is unreliable far from the head
     d = hd - 0.008
     rx, rz = _hw + 0.020, SR[2] * 1.06
     cy = SC[1] - 0.005; ry = (SC[1] + SR[1] + 0.014) - cy
     qy = np.maximum(0, y - cy) / ry
-    flare = 1 + 0.35 * np.clip((CHIN_Y - y) / 0.25, 0, 1)            # strands fall wider over the shoulders
+    flare = 1 + 0.10 * np.clip((CHIN_Y - y) / 0.25, 0, 1)
     long_ = (np.sqrt((x / (rx * flare)) ** 2 + ((z - (SC[2] - 0.022)) / (rz * (0.9 + 0.1 * flare))) ** 2 + qy ** 2) - 1) * min(rx, rz)
+    long_ = smax(long_, (SHOULDER_Y + 0.02) - y, 0.02)
     d = smin(d, long_, 0.02)
     # face window with straight, slightly wispy bangs
     bang = brow_y + 0.002 + 0.0022 * np.sin(x * 260) + 0.0012 * np.sin(x * 97)
@@ -433,14 +459,22 @@ def hair_sdf(P):
     # below the chin keep only the side curtains in front, nothing over the chest centre
     front = np.maximum(np.maximum(SC[2] + 0.005 - z, np.abs(x) - (_hw - 0.006)), y - (CHIN_Y + 0.01))
     d = smax(d, -front, 0.012)
+    # below the shoulder line all hair hangs behind the shoulders (no blobs sitting on top of them)
+    d = smax(d, -np.maximum((SC[2] - 0.035) - z, y - (SHOULDER_Y + 0.035)), 0.015)
     # layered ends: a soft V at the back, slightly shorter in front
     hem = HEM_Y + 0.05 * np.clip((z - (SC[2] - 0.05)) / 0.12, 0, 1) + 0.010 * np.abs(np.sin(x * 55)) + 0.006 * np.sin(x * 130)
     d = smax(d, hem - y, 0.012)
-    # never inside the body (hair rests on the shoulders and back)
+    # long hair lying on the upper back: a 1 cm sheet over the body surface, behind the shoulders
     low = y < CHIN_Y + 0.01                       # only the lower hair can meet the shoulders and back
-    bs = np.ones(len(P))
-    if low.any(): bs[low] = body_sdf(P[low]) - 0.007
-    d = smax(d, -bs, 0.006)
+    bd = np.full(len(P), 1.0)
+    if low.any(): bd[low] = body_sdf(P[low])
+    sheet_w = _hw + 0.006 - 0.012 * np.clip((SHOULDER_Y - y) / 0.25, 0, 1)
+    hem2 = HEM_Y + 0.07 * (np.clip(np.abs(x) / (_hw + 0.006), 0, 1) ** 2) + 0.006 * np.abs(np.sin(x * 70)) + 0.004 * np.sin(x * 150)
+    drape = np.maximum.reduce([np.abs(bd - 0.0125) - 0.0055, z - (SC[2] - 0.045), np.abs(x) - sheet_w,
+                               hem2 - y, y - (SHOULDER_Y + 0.06)])
+    d = smin(d, drape, 0.012)
+    # never inside the body
+    d = smax(d, -(bd - 0.007), 0.006)
     return d
 lo = np.array([SC[0] - 0.19, HEM_Y - 0.03, SC[2] - 0.16]); hi = np.array([SC[0] + 0.19, SC[1] + SR[1] + 0.04, SC[2] + 0.14])
 vox = 0.0026
@@ -454,7 +488,8 @@ def signed_volume(P, F): return np.einsum("ij,ij->i", P[F[:, 0]], np.cross(P[F[:
 if signed_volume(HVv, HF) < 0: HF = HF[:, [0, 2, 1]]
 # drop surface buried in the head
 c = HVv[HF].mean(1); _bs = np.ones(len(c)); _lo = c[:, 1] < CHIN_Y + 0.01; _bs[_lo] = body_sdf(c[_lo])
-HF = HF[(head_sdf(c) > 0.002) & (_bs > 0.002)]
+_hs = np.ones(len(c)); _hi = c[:, 1] > CHIN_Y - 0.02; _hs[_hi] = head_sdf(c[_hi])     # head test only near the head
+HF = HF[(_hs > 0.002) & (_bs > 0.002)]
 used = np.unique(HF); rm = -np.ones(len(HVv), int); rm[used] = np.arange(len(used)); HVv = HVv[used]; HF = rm[HF]
 from scipy.sparse.csgraph import connected_components
 _e = np.concatenate([HF[:, [0, 1]], HF[:, [1, 2]]])
@@ -551,6 +586,13 @@ for p in parts:
         N_ = vertex_normals(p["V"], p["F"])
         if p.get("base") is not None:   # weld normals across uv seams
             s3 = np.zeros((NB, 3)); np.add.at(s3, p["base"], N_); N_ = s3[p["base"]]; N_ /= np.maximum(norm(N_)[:, None], 1e-9)
+        if p is bp:    # smoothed chest: average normals over ~2 cm so collapsed vertex clusters don't sparkle
+            sel = np.where(bp["FR"] > 0.3)[0]
+            if len(sel):
+                tr_ = cKDTree(p["V"]); _, nn_ = tr_.query(p["V"][sel], k=48)
+                Na = N_[nn_].mean(1); Na /= np.maximum(norm(Na)[:, None], 1e-9)
+                wN = np.clip((bp["FR"][sel] - 0.3) / 0.4, 0, 1)[:, None]
+                N_[sel] = N_[sel] * (1 - wN) + Na * wN; N_[sel] /= np.maximum(norm(N_[sel])[:, None], 1e-9)
         p["N"] = N_
 
 # ------------------------------------------------------------------ 10. texture painting (position maps)
@@ -595,10 +637,10 @@ BASE = np.zeros((ATL, ATL, 3), np.float32); ROUGH = np.full((ATL, ATL), 0.55, np
 F = float
 EL, ER = [F(x) for x in EYE_L], [F(x) for x in EYE_R]; MYf = F(MOUTH_Y); HCz = F(HEAD_C[2])
 SCx, SCy, SCz, SRy = F(SC[0]), F(SC[1]), F(SC[2]), F(SR[1])
-COLLAR = F(collar_y); SP2z = F(B["spine02"]["head"][2])
+COLLAR = F(collar_y); SP2z = F(B["spine02"]["head"][2]); BLZ_HEM = F(blazer_hem) + 0.006; SK_HEM = F(hem_y) + 0.02
 SKIN = hexc("#E9BB9C"); SKIN_RED = hexc("#DE8F7E")
 BLAZER = hexc("#252E45"); SHIRT = hexc("#F5F4F0"); TIE = hexc("#9E2B33"); TIGHTS = hexc("#18181B"); SHOE = hexc("#141416")
-LIP = hexc("#C8656C")
+LIP = hexc("#C27670")
 ex0, ey0, ew, eh = TILES["eye"]
 EYE_IMG = np.asarray(Image.open(f"{MH}/eyes/materials/brown_eye.png").convert("RGB").resize((ew - 8, eh - 8)), np.float32) / 255
 PAD_R = 24
@@ -623,7 +665,7 @@ def paint(r0, r1):
     for sgn, e in ((1, EL), (-1, ER)):
         t = np.clip((sgn * px - 0.010) / 0.050, 0, 1)
         by = e[1] + 0.0185 + 0.0055 * np.sin(t * math.pi * 0.95) - 0.004 * t
-        th = 0.0021 * (1 - 0.6 * t) + 0.0004
+        th = 0.0017 * (1 - 0.6 * t) + 0.0004
         inb = (np.abs(py - by) < th) & (sgn * px > 0.010) & (sgn * px < 0.062) & ff & (pz > e[2] - 0.015)
         col = mix(col, np.broadcast_to(hexc("#33241F"), col.shape), np.clip(blur(inb, 3.0) * 0.85, 0, 1))
     lipzone = ff & (np.abs(py - MYf) < 0.011) & (np.abs(px) < 0.026)
@@ -656,9 +698,15 @@ def paint(r0, r1):
         outfit = mix(outfit, np.broadcast_to(hexc("#B8954E"), outfit.shape), blur(btn, 1.0) * 0.85)
     torso_zone = is_body & (np.abs(px) < 0.13) & (py < COLLAR + 0.03) & (py > COLLAR - 0.35)
     wb = np.where(torso_zone, ss(COLLAR + 0.004, COLLAR - 0.004, py), wb)
+    torso_px = np.abs(px) < 0.16
+    hem_w = ss(BLZ_HEM - 0.0015, BLZ_HEM + 0.0015, py)
+    wb = np.where(torso_px & (np.abs(py - BLZ_HEM) < 0.03) & (wb > 0.05), hem_w, wb)
     bc = mix(col, outfit, np.clip(wb * 1.3, 0, 1))
     legs = mix(col, TIGHTS * (0.9 + 0.2 * nmid[..., None]) + col * 0.12, np.clip(wl, 0, 1) * (1 - np.clip(wb, 0, 1)))
     bc = np.where(((wl > 0.01) & (wb < 0.5))[..., None], legs, bc)
+    # body under the skirt takes the skirt's base colour, so nothing skin-coloured pokes through the fabric
+    under = is_body & torso_px & (py < BLZ_HEM) & (py > SK_HEM) & (wsh < 0.1)
+    bc = np.where(under[..., None], hexc("#3E4452") * (0.9 + 0.1 * nmid[..., None]), bc)
     bc = mix(bc, np.broadcast_to(SHOE, bc.shape), np.clip(wsh * 1.2, 0, 1))
     # shirt collar band around the neck, just above the blazer
     collar = is_body & (py > COLLAR - 0.004) & (py < COLLAR + 0.016 - 0.012 * np.clip((HCz - 0.02 - pz) / 0.08, 0, 1)) & (wb < 0.6)
