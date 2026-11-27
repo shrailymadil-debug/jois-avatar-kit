@@ -445,12 +445,13 @@ def hair_sdf(P):
     hd = head_sdf(P)
     hd = np.where(y < CHIN_Y - 0.03, np.maximum(hd, 0.05), hd)    # its sign is unreliable far from the head
     d = hd - 0.008
-    rx, rz = _hw + 0.020, SR[2] * 1.06
+    rx, rz = _hw + 0.014, SR[2] * 1.05
     cy = SC[1] - 0.005; ry = (SC[1] + SR[1] + 0.014) - cy
     qy = np.maximum(0, y - cy) / ry
     flare = 1 + 0.10 * np.clip((CHIN_Y - y) / 0.25, 0, 1)
     long_ = (np.sqrt((x / (rx * flare)) ** 2 + ((z - (SC[2] - 0.022)) / (rz * (0.9 + 0.1 * flare))) ** 2 + qy ** 2) - 1) * min(rx, rz)
-    long_ = smax(long_, (SHOULDER_Y + 0.02) - y, 0.02)
+    # ends slope backwards: the front of each side curtain stops higher, so the hair visibly falls behind the shoulders
+    long_ = smax(long_, (SHOULDER_Y + 0.025 + 0.55 * np.clip(z - (SC[2] - 0.045), 0, None)) - y, 0.03)
     d = smin(d, long_, 0.02)
     # face window with straight, slightly wispy bangs
     bang = brow_y + 0.002 + 0.0022 * np.sin(x * 260) + 0.0012 * np.sin(x * 97)
