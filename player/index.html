@@ -992,7 +992,7 @@ const getBuf = async (u) => {
     const { done, value } = await rd.read(); if (done) break;
     chunks.push(value); got += value.length;
     const mb = (got / 1048576).toFixed(1);
-    $("loading").textContent = total ? `загружаю аватар… ${Math.round(got / total * 100)}% (${mb} из ${(total / 1048576).toFixed(1)} МБ)` : `загружаю аватар… ${mb} МБ`;
+    $("loading").textContent = total && got <= total ? `загружаю аватар… ${Math.min(99, Math.round(got / total * 100))}%` : `загружаю аватар… ${mb} МБ`;
   }
   const out = new Uint8Array(got); let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
   return out.buffer;
